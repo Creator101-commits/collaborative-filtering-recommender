@@ -8,27 +8,28 @@
 
 # Collaborative Filtering Recommender
 
-{{One or two sentences describing what this project is and does.}}
+A reproducible Python research project comparing popularity, neighborhood, matrix-factorization, and BPR recommenders on MovieLens 1M.
 
 ## Build commands
 
 ```bash
-{{install command}}       # e.g. npm install / cargo build / pip install -r requirements.txt
-{{test command}}          # must be runnable with no API spend where possible
-{{build command}}
-{{lint/format command}}
+# Planned after Milestone 1; not runnable yet.
+uv sync
+uv run pytest
+uv run ruff check .
+uv run mypy src
 ```
 
 ## Platform support
 
-- {{e.g. "macOS + Linux only" or "Tauri app — macOS/Windows/Linux via CI matrix"}}
-- {{Any known platform quirks, missing support, workarounds}}
+- macOS and Linux; Python 3.12.
+- CPU development is the default; PyTorch training may benefit from CUDA.
 
 ## Key conventions
 
-- {{Project-specific structural rules — e.g. "generated files live in X, edit the source template not the output"}}
-- {{State/config path resolution conventions, if any}}
-- {{Anything a new agent session needs to know before touching this repo that isn't obvious from file structure}}
+- Keep raw data, processed tables, checkpoints, MLflow runs, and large artifacts out of Git.
+- Use chronological per-user splits and keep held-out interactions out of training and model selection.
+- Do not use demographics as model features; compare every model on the same candidate catalog and metrics.
 
 ---
 
@@ -44,7 +45,7 @@ reason to change it for this project.
   a different package manager than the one already in use in this repo.
 - **Don't fabricate data** for benchmarks, logs, or anything used for real
   measurement, grading, or competition tracking.
-- {{Add any project-specific hard rules here — e.g. "never hand-edit generated files"}}
+- Keep dataset leakage controls and declared evaluation protocols intact; do not fabricate benchmark results.
 
 ### Workflow expectations
 
@@ -143,9 +144,7 @@ falling back to raw bash/grep when a more precise extension covers it.
   avoid it, reuse existing code, fix root causes at the shared function
   rather than patching call sites. Deliberate shortcuts get a ponytail
   comment with a named ceiling and upgrade path, not silent debt.
-  {{If this repo has scientific/research code where "minimum code" is the
-  wrong default (e.g. a research contribution that needs to be implemented
-  in full), note that exclusion here explicitly.}}
+- Research protocols, data leakage controls, and statistical safeguards take priority over implementation shortcuts.
 
 **Design (frontend/UI work only)**
 - **`pi-frontend-create`** — activates automatically when building web, app, desktop app UI
