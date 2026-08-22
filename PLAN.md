@@ -210,54 +210,198 @@ Processed data will use Parquet with explicit dtypes and deterministic sorting. 
 - Recommendation concentration: proportion of exposure assigned to the most popular 1%, 5%, and 10% of items
 - Cold-start proxy: users with the shortest permitted histories and items with the fewest training interactions
 
-## Milestones
+## Phased delivery plan
 
-### 1. Reproducible Python skeleton
+Complete the phases in order. Do not start a phase until the previous phase's exit gate passes. Every phase includes its tests and documentation; a phase is not complete when its code exists but its checks fail.
 
-Create `pyproject.toml`, lock dependencies, establish the `src/` package layout, add the Typer CLI, configure Ruff and mypy, and set up pytest and GitHub Actions. Ship a `recommender --help` command, one passing test, and CI that verifies a clean installation.
+### Phase 1: Reproducible project skeleton
 
-### 2. Dataset acquisition and validation
+**Work**
 
-Implement the idempotent MovieLens downloader, checksum handling, source parser, schema validation, and raw-data manifest. Test parsers with tiny committed fixtures and test failure behavior for malformed records and invalid hashes. Ship a command that produces a validated raw dataset without manual file movement.
+- Create `pyproject.toml` and `uv.lock` for Python 3.12.
+- Establish the `src/recommender/` package and `tests/` layout.
+- Add a thin Typer CLI with a `recommender --help` entry point.
+- Configure pytest, Ruff, mypy, and GitHub Actions.
+- Add development and verification commands to the README.
 
-### 3. Deterministic preparation pipeline
+**Exit gate**
 
-Implement identifier indexing, rating-threshold configuration, per-user chronological splitting, Parquet output, and the processed manifest. Add invariant tests proving that partitions do not overlap, indices remain stable, training events precede held-out events, and repeated preparation produces identical hashes.
+- A clean checkout can run `uv sync`.
+- `recommender --help`, tests, linting, and type checking pass locally and in CI.
 
-### 4. Shared evaluator and popularity baseline
+### Phase 2: Dataset acquisition and source validation
 
-Implement the recommender protocol, full-catalog candidate generation, ranking metrics, coverage and popularity metrics, and the popularity model. Verify metrics on hand-computed fixtures. Ship the first complete run from raw data through a tracked baseline and generated result table.
+**Depends on:** Phase 1.
 
-### 5. Neighborhood collaborative filtering
+**Work**
 
-Implement sparse user-KNN and item-KNN with configurable similarity, neighbor count, shrinkage, and minimum support. Add unit tests for similarity and scoring, validation experiments for hyperparameter selection, and slice reports showing behavior across user-history and item-popularity groups.
+- Implement an idempotent MovieLens 1M download command using the official source.
+- Verify the archive checksum and expected source files before extraction.
+- Parse source records into explicit typed structures and reject malformed input.
+- Record source URL, acquisition time, archive hash, file sizes, and record counts in a raw-data manifest.
+- Test checksum failures, malformed records, repeat downloads, and tiny committed fixtures.
 
-### 6. Latent-factor models
+**Exit gate**
 
-Implement biased matrix factorization and BPR in PyTorch with seeded initialization, mini-batch training, validation-based checkpointing, and model serialization. Add gradient and overfitting tests on small synthetic data. Ship repeatable training and evaluation commands for both models.
+- One command produces a validated raw dataset without manual file movement.
+- Repeating the command leaves valid existing data unchanged.
+- Raw data and temporary download files are excluded from Git.
 
-### 7. Experiment tracking and controlled comparison
+### Phase 3: Deterministic preparation and frozen splits
 
-Standardize MLflow logging across all models, record data-manifest hashes and Git revisions, run bounded validation sweeps, select final configurations without test access, then evaluate selected models on the frozen test split across repeated seeds. Ship a consolidated results table containing means, intervals, runtimes, and artifact references.
+**Depends on:** Phase 2.
 
-### 8. Robustness, uncertainty, and failure analysis
+**Work**
 
-Add bootstrap confidence intervals, paired model-difference estimates, history-length slices, popularity slices, recommendation-concentration analysis, and representative failure cases. Ship figures and tables that directly answer each research question, including results that do not support the expected conclusion.
+- Resolve the positive-rating threshold and minimum-history rules before implementing the split.
+- Create stable zero-based user and item indices.
+- Build deterministic per-user chronological train, validation, and test splits.
+- Hold out the last two positive events; keep every source interaction earlier than validation in train and exclude later unused events.
+- Write typed, deterministically sorted Parquet tables and a processed-data manifest.
+- Validate that partitions do not overlap, training events precede held-out events, and every evaluated user has eligible candidates.
+- Test stable indices, split invariants, repeated-output hashes, and stale-manifest rejection.
 
-### 9. Final research artifact
+**Exit gate**
 
-Write the final report with abstract, motivation, related-method overview, data, protocol, models, results, limitations, reproducibility instructions, and conclusions. Update the README so every advertised command has been verified from a clean environment. Tag a reproducible v1 release only after tests, linting, typing, the smoke experiment, and report generation pass.
+- Repeated preparation from the same raw data and configuration produces identical artifacts.
+- The manifest captures every filtering and split decision needed to reproduce the data.
+- The test split is frozen and inaccessible to model selection.
+
+### Phase 4: Evaluation foundation and popularity baseline
+
+**Depends on:** Phase 3.
+
+**Work**
+
+- Define the shared recommender protocol and artifact metadata.
+- Implement full-catalog candidate generation that removes only interactions unavailable under the declared protocol.
+- Implement ranking, coverage, novelty, popularity, and concentration metrics.
+- Verify each metric with small examples whose expected values are calculated by hand.
+- Implement the popularity baseline and a common experiment runner with seeds, runtimes, Git revision, configuration, and data-manifest hashes.
+- Log the first end-to-end validation run to local MLflow and generate a result table.
+
+**Exit gate**
+
+- One command runs acquisition through baseline evaluation without test-label access.
+- Candidate and leakage invariants have direct tests.
+- The baseline run is reproducible from its saved configuration and artifact metadata.
+
+### Phase 5: Neighborhood models
+
+**Depends on:** Phase 4.
+
+**Work**
+
+- Implement sparse user-KNN and item-KNN behind the shared protocol.
+- Support only validation-justified settings for similarity, neighbor count, shrinkage, and minimum support.
+- Test similarity, neighbor selection, seen-item filtering, scoring, and serialization on small fixtures.
+- Run a bounded validation comparison against the popularity baseline.
+
+**Exit gate**
+
+- Both KNN models train, save, load, and evaluate through the common runner.
+- Reloaded artifacts reproduce recommendations.
+- Selected KNN settings and rejected alternatives are recorded without test-set access.
+
+### Phase 6: Biased matrix factorization
+
+**Depends on:** Phase 5.
+
+**Work**
+
+- Implement seeded PyTorch biased matrix factorization with mini-batch training.
+- Add validation-based checkpointing and shared artifact serialization.
+- Test deterministic initialization, gradient updates, save/load parity, and overfitting on a tiny synthetic fixture.
+- Compare a bounded set of configurations on validation data.
+
+**Exit gate**
+
+- Training and evaluation are repeatable for a fixed seed.
+- A reloaded checkpoint reproduces scores within a documented numerical tolerance.
+- The selected configuration is recorded before test evaluation.
+
+### Phase 7: Bayesian Personalized Ranking
+
+**Depends on:** Phase 6.
+
+**Work**
+
+- Implement seeded negative sampling and BPR loss using the same interaction data and candidate catalog.
+- Add validation-based checkpointing and shared artifact serialization.
+- Test that negatives are unobserved under the training protocol, gradients update parameters, save/load preserves scores, and a tiny fixture can be overfit.
+- Compare a bounded set of configurations on validation data.
+
+**Exit gate**
+
+- BPR trains and evaluates through the same runner and evaluator as every other model.
+- Sampling is reproducible for a fixed seed and cannot draw held-out positives as training evidence.
+- The selected configuration is recorded before test evaluation.
+
+### Phase 8: Lock the comparison protocol
+
+**Depends on:** Phase 7.
+
+**Work**
+
+- Resolve the final metric definitions, slice boundaries, seed list, bootstrap settings, and compute budget.
+- Standardize MLflow fields and artifact layouts across all models.
+- Audit configurations and manifests for candidate-set parity and leakage.
+- Select one final configuration per model using validation results only.
+- Write an experiment card that freezes the test procedure before opening test results.
+
+**Exit gate**
+
+- Every model can be reproduced from a configuration, data-manifest hash, code revision, and seed.
+- The experiment card names all models, metrics, slices, seeds, and statistical comparisons.
+- No unresolved protocol decision can change after test results are viewed.
+
+### Phase 9: Final test evaluation and analysis
+
+**Depends on:** Phase 8.
+
+**Work**
+
+- Evaluate every locked model once under the frozen test protocol, using the declared repeated seeds for learned models.
+- Calculate aggregate metrics and 95% user-level bootstrap confidence intervals.
+- Calculate paired per-user bootstrap differences between the leading model and each baseline.
+- Produce history-length, item-popularity, cold-start-proxy, and recommendation-concentration slices.
+- Record runtimes, practical memory measurements, artifact sizes, neutral results, failed runs, and representative failure cases.
+
+**Exit gate**
+
+- A consolidated machine-readable results table contains estimates, intervals, seeds, runtimes, and artifact references.
+- Figures and tables directly answer every research question without unsupported winner claims.
+- Final test results are never used to retune or reselect a model.
+
+### Phase 10: Reproducible report and v1 release
+
+**Depends on:** Phase 9.
+
+**Work**
+
+- Write the final report: abstract, motivation, methods, data, protocol, results, uncertainty, failure analysis, limitations, and conclusions.
+- Generate publication-quality tables, figures, and machine-readable summarized results without retraining models.
+- Replace README placeholders with verified installation, workflow, reproduction, attribution, and artifact instructions.
+- Run the complete workflow from a clean checkout and document expected runtime and hardware.
+- Decide where raw MLflow runs and large artifacts are published while keeping them out of Git.
+
+**Exit gate**
+
+- Tests, linting, typing, CI, the smoke experiment, and report generation all pass.
+- Every advertised command has been verified from a clean environment.
+- The report can be traced to immutable configurations, manifests, run IDs, and the Git revision.
+- Tag the reproducible v1 release only after all earlier gates pass.
 
 ## Open questions
 
-These decisions do not block the skeleton or data milestones, but they must be resolved before final experiments:
+Resolve each decision by the named phase and record the outcome in configuration or project documentation before continuing:
 
-1. **Positive relevance threshold:** Start with ratings `>= 4`; test `>= 3.5` or all non-negative interactions only as a documented sensitivity analysis, not after seeing test results.
-2. **Minimum user history:** Select a minimum that guarantees train, validation, and test evidence while retaining most users. Record the exact rule and exclusion count in the manifest.
-3. **KNN similarity:** Compare cosine and adjusted-cosine or Pearson-style similarity on validation data while keeping the full-catalog evaluator unchanged.
-4. **Matrix-factorization objective:** Use squared-error learning for the biased factorization baseline and pairwise ranking for BPR. Decide whether an additional implicit-feedback pointwise objective adds enough information to justify another model.
-5. **Bootstrap method:** Begin with resampling users because the reported metrics are user aggregates. Document that this does not capture every dependency caused by shared items.
-6. **Novelty definition:** Choose one published, clearly stated inverse-popularity formulation before running final test evaluation and preserve it in configuration.
-7. **Demographic auditing:** Leave disabled by default. Enable only if there is a precise research purpose, appropriate interpretation, and explicit discussion of sensitive attributes and dataset limitations.
-8. **Compute budget:** Establish maximum epochs, validation trials, and wall-clock limits before hyperparameter tuning so comparisons remain feasible and reproducible on a normal laptop.
-9. **Result publication:** Decide whether summarized result tables and small figures will be committed while raw MLflow runs remain external or attached to a release.
+1. **Positive relevance threshold (resolved in Phase 3):** The primary split uses ratings `>= 4`. Any `>= 3.5` or all-interaction variant is a preregistered sensitivity analysis, not a response to test results.
+2. **Minimum user history (resolved in Phase 3):** Evaluated users need at least 3 positive interactions, leaving at least one training interaction plus validation and test events after chronological ordering. The processed manifest records the threshold, exclusion count, and split protocol.
+3. **KNN similarity (during Phase 5):** Compare cosine with at most one adjusted-cosine or Pearson-style alternative on validation data while keeping the evaluator unchanged.
+4. **Matrix-factorization objective (before Phase 6):** Use squared-error learning for biased matrix factorization and pairwise ranking for BPR. Do not add another objective unless validation evidence and the compute budget justify it.
+5. **Bootstrap method (before Phase 8):** Use user-level resampling because the reported metrics are user aggregates, and document that it does not capture every dependency caused by shared items.
+6. **Novelty definition (before Phase 8):** Choose one published inverse-popularity formulation and preserve it in configuration before final test evaluation.
+7. **Demographic auditing (before Phase 8):** Leave it disabled by default. Enable it only for a precise research purpose with documented ethical interpretation and dataset limitations.
+8. **Compute budget (before validation sweeps in Phase 5):** Fix maximum epochs, trials, seeds, and wall-clock limits so comparisons remain feasible on a normal laptop.
+9. **Result publication (before Phase 10):** Decide whether summarized tables and figures are committed while raw MLflow runs remain external or are attached to a release.

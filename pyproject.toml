@@ -1,0 +1,43 @@
+[project]
+name = "collaborative-filtering-recommender"
+version = "0.1.0"
+description = "A reproducible MovieLens 1M collaborative-filtering benchmark"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pyarrow>=23.0.0",
+    "typer>=0.21.0",
+]
+
+[project.scripts]
+recommender = "recommender.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "recommender"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "ruff>=0.15.5",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]

@@ -1,16 +1,11 @@
-![Banner](./image.png)
-
 # Collaborative Filtering Recommender
 
 > A reproducible MovieLens 1M benchmark for collaborative-filtering recommendation methods.
 
-![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/Creator101-commits/collaborative-filtering-recommender?include_prereleases)
-![GitHub last commit](https://img.shields.io/github/last-commit/Creator101-commits/collaborative-filtering-recommender)
-![GitHub issues](https://img.shields.io/github/issues-raw/Creator101-commits/collaborative-filtering-recommender)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/Creator101-commits/collaborative-filtering-recommender)
-![GitHub](https://img.shields.io/github/license/Creator101-commits/collaborative-filtering-recommender)
+[![CI](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml/badge.svg)](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/Creator101-commits/collaborative-filtering-recommender)](./LICENSE)
 
-This repository contains the plan for a reproducible MovieLens 1M study comparing popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking. The project will use one top-N evaluation protocol to measure ranking quality, catalog coverage, popularity bias, cold-start behavior, runtime, and uncertainty.
+This project will compare popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking under one leakage-controlled top-N evaluation protocol. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
 
 ## Table of Contents
 
@@ -26,88 +21,82 @@ This repository contains the plan for a reproducible MovieLens 1M study comparin
 
 ## Quickstart / Demo
 [(Back to top)](#table-of-contents)
+Download, validate, and prepare MovieLens 1M with the reproducible workflow:
 
-A short demo, screenshot, or GIF that lets the reader see the project in action in under a minute. Link to a hosted demo if you have one.
+```sh
+uv sync
+uv run recommender download
+uv run recommender prepare
+```
 
 ## Installation
 [(Back to top)](#table-of-contents)
 
-> **Note**: For longer README files, a "Back to top" link like the one above makes it easy to navigate.
+Requirements:
 
-Add snippets here that your readers can copy-paste with one click.
-
-**macOS & Linux**
-
-```sh
-npm install my-module --save
-```
-
-**Windows**
+- macOS or Linux
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 
 ```sh
-npm install my-module --save
+git clone https://github.com/Creator101-commits/collaborative-filtering-recommender.git
+cd collaborative-filtering-recommender
+uv sync --locked
 ```
 
 ## Usage
 [(Back to top)](#table-of-contents)
 
-Explain how to use your project here. Create subsections for different features or workflows so users can find what they need quickly.
-
 ```sh
-my-module --help
+uv run recommender download
+uv run recommender prepare
 ```
+
+The `download` command fetches from GroupLens, verifies the pinned archive size and checksums, validates every source record, and writes `data/raw/movielens-1m/manifest.json`. Rerunning it reuses the data only when every file still matches the manifest. Use `--output-dir` to choose another location.
+
+The `prepare` command reads the validated raw manifest, assigns stable zero-based indices in ascending identifier order, treats ratings `>= 4` as positive, and requires at least 3 positive interactions per evaluated user. It writes typed `ratings.parquet`, `movies.parquet`, `users.parquet`, `train.parquet`, `validation.parquet`, and `test.parquet` files plus `data/processed/movielens-1m/manifest.json`. Positive interactions are ordered by timestamp, movie ID, and source row; the last two become validation and test. `train.parquet` contains every source interaction earlier than validation, including lower-rated observations, while later unselected interactions remain outside training. Re-running with the same raw manifest and configuration reuses identical output and rejects stale or modified artifacts.
+
+Use `--raw-dir`, `--output-dir`, `--positive-rating-threshold`, or `--minimum-positive-history` to override the defaults.
+MovieLens 1M is provided by GroupLens for research use under conditions that require attribution and restrict redistribution and commercial use. Review the [dataset README and license](https://files.grouplens.org/datasets/movielens/ml-1m-README.txt) before use. Publications should cite F. Maxwell Harper and Joseph A. Konstan, “The MovieLens Datasets: History and Context,” ACM TiiS 5(4), 2015, https://doi.org/10.1145/2827872.
+
+Training, evaluation, comparison, and reporting commands are planned but not implemented yet.
 
 ## Development
 [(Back to top)](#table-of-contents)
 
-Instructions for setting up a local development environment so you can build and run the project from source.
+Run the same checks used by CI:
 
 ```sh
-git clone https://github.com/Creator101-commits/collaborative-filtering-recommender.git
-cd collaborative-filtering-recommender
-# install dependencies
-npm install
-# run in development mode
-npm run dev
+uv sync --locked
+uv run pytest
+uv run ruff check .
+uv run mypy src
 ```
 
 ## Contributing
 [(Back to top)](#table-of-contents)
 
-Contributions are welcome. To propose a change:
+1. Fork the repository.
+2. Create a focused feature branch.
+3. Add tests for the change.
+4. Run all development checks.
+5. Open a pull request with a clear description of why the change is needed.
 
-1. Fork it (<https://github.com/Creator101-commits/collaborative-filtering-recommender/fork>)
-2. Create your feature branch (`git checkout -b feature/fooBar`)
-3. Commit your changes (`git commit -am 'Add some fooBar'`)
-4. Push to the branch (`git push origin feature/fooBar`)
-5. Open a new Pull Request
-
-Please make sure tests pass and the code is formatted before opening a PR.
+Use conventional commit messages such as `feat:`, `fix:`, and `chore:`.
 
 ## Release History
 [(Back to top)](#table-of-contents)
 
-* 0.2.1
-    * CHANGE: Update docs (module code remains unchanged)
-* 0.2.0
-    * CHANGE: Remove `setDefaultXYZ()`
-    * ADD: Add `init()`
-* 0.1.1
-    * FIX: Crash when calling `baz()` (Thanks @GenerousContributorName!)
-* 0.1.0
-    * The first proper release
-    * CHANGE: Rename `foo()` to `bar()`
-* 0.0.1
-    * Work in progress
+No releases have been published yet.
 
 ## License
 [(Back to top)](#table-of-contents)
 
-Distributed under the MIT License. See [`LICENSE`](./LICENSE) for more information.
+Distributed under the MIT License. See [`LICENSE`](./LICENSE) for details.
 
 ## Meta
 [(Back to top)](#table-of-contents)
 
-Sreeharsha Kannegundla – [@YourTwitter](https://twitter.com/YourTwitter) – YourEmail@example.com
+Sreeharsha Kannegundla
 
-Project link: [https://github.com/Creator101-commits/collaborative-filtering-recommender](https://github.com/Creator101-commits/collaborative-filtering-recommender)
+Project: [github.com/Creator101-commits/collaborative-filtering-recommender](https://github.com/Creator101-commits/collaborative-filtering-recommender)
