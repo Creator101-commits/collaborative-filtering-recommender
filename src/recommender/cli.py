@@ -13,6 +13,17 @@ from recommender.data import (
     acquire_dataset,
     prepare_dataset,
 )
+from recommender.experiments import (
+    DEFAULT_ARTIFACT_DIR,
+    DEFAULT_EXPERIMENT_NAME,
+    DEFAULT_TRACKING_DIR,
+    ExperimentConfig,
+    ExperimentError,
+    run_bpr_baseline,
+    run_matrix_factorization_baseline,
+    run_neighborhood_baseline,
+    run_popularity_baseline,
+)
 
 app = typer.Typer(help="Run the reproducible MovieLens 1M benchmark.")
 
@@ -62,3 +73,98 @@ def prepare(
     except (DatasetError, ValueError) as error:
         raise typer.BadParameter(str(error)) from error
     typer.echo(f"Processed dataset ready: {manifest}")
+
+
+@app.command()
+def evaluate(
+    model: str = typer.Option(
+        "popularity", help="Model: popularity, user_knn, item_knn, matrix_factorization, or bpr."
+    ),
+    processed_dir: Path = typer.Option(
+        DEFAULT_PROCESSED_DIR, help="Prepared dataset directory.", file_okay=False
+    ),
+    tracking_dir: Path = typer.Option(
+        DEFAULT_TRACKING_DIR, help="Local MLflow tracking directory.", file_okay=False
+    ),
+    artifact_dir: Path = typer.Option(
+        DEFAULT_ARTIFACT_DIR, help="Model and result artifact directory.", file_okay=False
+    ),
+    cutoff: int = typer.Option(10, help="Recommendation cutoff."),
+    positive_rating_threshold: int = typer.Option(
+        DEFAULT_POSITIVE_RATING_THRESHOLD, help="Minimum rating counted as positive."
+    ),
+    n_neighbors: int = typer.Option(40, help="Number of nearest neighbors for KNN models."),
+    similarity: str = typer.Option("cosine", help="KNN similarity setting."),
+    shrinkage: float = typer.Option(10.0, help="KNN similarity shrinkage."),
+    min_support: int = typer.Option(1, help="Minimum shared support for KNN neighbors."),
+    latent_dim: int = typer.Option(32, help="Latent factor count for matrix factorization."),
+    learning_rate: float = typer.Option(0.01, help="Matrix-factorization learning rate."),
+    regularization: float = typer.Option(0.0001, help="Matrix-factorization L2 penalty."),
+    epochs: int = typer.Option(20, help="Matrix-factorization training epochs."),
+    batch_size: int = typer.Option(1024, help="Matrix-factorization mini-batch size."),
+    negative_samples: int = typer.Option(
+        1, help="Negative samples per positive BPR pair."
+    ),
+    seed: int = typer.Option(0, help="Experiment seed."),
+    experiment_name: str = typer.Option(
+        DEFAULT_EXPERIMENT_NAME, help="Local MLflow experiment name."
+    ),
+) -> None:
+    """Fit a selected baseline and evaluate against validation only."""
+    try:
+        config = ExperimentConfig(
+            cutoff=cutoff,
+            positive_rating_threshold=positive_rating_threshold,
+            seed=seed,
+            experiment_name=experiment_name,
+        )
+        if model == "popularity":
+            result = run_popularity_baseline(
+                processed_dir,
+                tracking_dir=tracking_dir,
+                artifact_dir=artifact_dir,
+                config=config,
+            )
+        elif model == "bpr":
+            result = run_bpr_baseline(
+                processed_dir,
+                latent_dim=latent_dim,
+                learning_rate=learning_rate,
+                regularization=regularization,
+                epochs=epochs,
+                batch_size=batch_size,
+                negative_samples=negative_samples,
+                tracking_dir=tracking_dir,
+                artifact_dir=artifact_dir,
+                config=config,
+            )
+        elif model == "matrix_factorization":
+            result = run_matrix_factorization_baseline(
+                processed_dir,
+                latent_dim=latent_dim,
+                learning_rate=learning_rate,
+                regularization=regularization,
+                epochs=epochs,
+                batch_size=batch_size,
+                tracking_dir=tracking_dir,
+                artifact_dir=artifact_dir,
+                config=config,
+            )
+        else:
+            result = run_neighborhood_baseline(
+                processed_dir,
+                model=model,
+                n_neighbors=n_neighbors,
+                similarity=similarity,
+                shrinkage=shrinkage,
+                min_support=min_support,
+                tracking_dir=tracking_dir,
+                artifact_dir=artifact_dir,
+                config=config,
+            )
+    except (ExperimentError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(f"Validation run: {result.run_id}")
+    typer.echo(f"Results: {result.results_path}")
+    for name, value in result.metrics.items():
+        typer.echo(f"{name}: {value:.6f}")

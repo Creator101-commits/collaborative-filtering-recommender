@@ -214,7 +214,10 @@ Processed data will use Parquet with explicit dtypes and deterministic sorting. 
 
 Complete the phases in order. Do not start a phase until the previous phase's exit gate passes. Every phase includes its tests and documentation; a phase is not complete when its code exists but its checks fail.
 
+**Current status:** Phases 1 through 7 are complete, including the validation-only runner, popularity and neighborhood models, biased matrix factorization, BPR, shared artifacts, MLflow logging, CLI integration, tests, and documentation. Phase 8 is next; final test evaluation, bootstrap analysis, comparison, and reporting remain intentionally deferred until the protocol is frozen.
+
 ### Phase 1: Reproducible project skeleton
+**Status:** Complete.
 
 **Work**
 
@@ -230,6 +233,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - `recommender --help`, tests, linting, and type checking pass locally and in CI.
 
 ### Phase 2: Dataset acquisition and source validation
+**Status:** Complete.
 
 **Depends on:** Phase 1.
 
@@ -248,6 +252,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - Raw data and temporary download files are excluded from Git.
 
 ### Phase 3: Deterministic preparation and frozen splits
+**Status:** Complete.
 
 **Depends on:** Phase 2.
 
@@ -268,6 +273,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - The test split is frozen and inaccessible to model selection.
 
 ### Phase 4: Evaluation foundation and popularity baseline
+**Status:** Complete.
 
 **Depends on:** Phase 3.
 
@@ -287,6 +293,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - The baseline run is reproducible from its saved configuration and artifact metadata.
 
 ### Phase 5: Neighborhood models
+**Status:** Complete.
 
 **Depends on:** Phase 4.
 
@@ -304,6 +311,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - Selected KNN settings and rejected alternatives are recorded without test-set access.
 
 ### Phase 6: Biased matrix factorization
+**Status:** Complete.
 
 **Depends on:** Phase 5.
 
@@ -321,6 +329,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - The selected configuration is recorded before test evaluation.
 
 ### Phase 7: Bayesian Personalized Ranking
+**Status:** Complete.
 
 **Depends on:** Phase 6.
 
@@ -338,6 +347,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - The selected configuration is recorded before test evaluation.
 
 ### Phase 8: Lock the comparison protocol
+**Status:** Next.
 
 **Depends on:** Phase 7.
 
@@ -356,6 +366,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - No unresolved protocol decision can change after test results are viewed.
 
 ### Phase 9: Final test evaluation and analysis
+**Status:** Planned.
 
 **Depends on:** Phase 8.
 
@@ -374,6 +385,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - Final test results are never used to retune or reselect a model.
 
 ### Phase 10: Reproducible report and v1 release
+**Status:** Planned.
 
 **Depends on:** Phase 9.
 
@@ -398,10 +410,10 @@ Resolve each decision by the named phase and record the outcome in configuration
 
 1. **Positive relevance threshold (resolved in Phase 3):** The primary split uses ratings `>= 4`. Any `>= 3.5` or all-interaction variant is a preregistered sensitivity analysis, not a response to test results.
 2. **Minimum user history (resolved in Phase 3):** Evaluated users need at least 3 positive interactions, leaving at least one training interaction plus validation and test events after chronological ordering. The processed manifest records the threshold, exclusion count, and split protocol.
-3. **KNN similarity (during Phase 5):** Compare cosine with at most one adjusted-cosine or Pearson-style alternative on validation data while keeping the evaluator unchanged.
-4. **Matrix-factorization objective (before Phase 6):** Use squared-error learning for biased matrix factorization and pairwise ranking for BPR. Do not add another objective unless validation evidence and the compute budget justify it.
+3. **KNN similarity (resolved in Phase 5):** Implement cosine as the primary setting and adjusted cosine as the single validation alternative. Pearson is not supported; the evaluator and candidate protocol stay unchanged while the two settings are compared on validation runs.
+4. **Learned-model objectives (resolved in Phases 6-7):** Use squared-error learning for biased matrix factorization and pairwise ranking for BPR. Do not add another objective unless validation evidence and the compute budget justify it.
 5. **Bootstrap method (before Phase 8):** Use user-level resampling because the reported metrics are user aggregates, and document that it does not capture every dependency caused by shared items.
 6. **Novelty definition (before Phase 8):** Choose one published inverse-popularity formulation and preserve it in configuration before final test evaluation.
 7. **Demographic auditing (before Phase 8):** Leave it disabled by default. Enable it only for a precise research purpose with documented ethical interpretation and dataset limitations.
-8. **Compute budget (before validation sweeps in Phase 5):** Fix maximum epochs, trials, seeds, and wall-clock limits so comparisons remain feasible on a normal laptop.
+8. **Compute budget (resolved in Phase 5 for KNN):** Run at most one validation run for each of the two KNN axes and two similarity settings, using `n_neighbors=40`, `shrinkage=10`, `min_support=1`, and one seed. Do not inspect test labels during this comparison.
 9. **Result publication (before Phase 10):** Decide whether summarized tables and figures are committed while raw MLflow runs remain external or are attached to a release.

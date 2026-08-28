@@ -5,7 +5,7 @@
 [![CI](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml/badge.svg)](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/github/license/Creator101-commits/collaborative-filtering-recommender)](./LICENSE)
 
-This project will compare popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking under one leakage-controlled top-N evaluation protocol. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
+This project provides a leakage-controlled top-N validation workflow for popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking. Cross-model comparison, final test evaluation, and reporting remain planned. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
 
 ## Table of Contents
 
@@ -21,12 +21,13 @@ This project will compare popularity, user- and item-based KNN, biased matrix fa
 
 ## Quickstart / Demo
 [(Back to top)](#table-of-contents)
-Download, validate, and prepare MovieLens 1M with the reproducible workflow:
+Download, validate, prepare, and evaluate MovieLens 1M with the reproducible workflow:
 
 ```sh
 uv sync
 uv run recommender download
 uv run recommender prepare
+uv run recommender evaluate
 ```
 
 ## Installation
@@ -50,6 +51,7 @@ uv sync --locked
 ```sh
 uv run recommender download
 uv run recommender prepare
+uv run recommender evaluate
 ```
 
 The `download` command fetches from GroupLens, verifies the pinned archive size and checksums, validates every source record, and writes `data/raw/movielens-1m/manifest.json`. Rerunning it reuses the data only when every file still matches the manifest. Use `--output-dir` to choose another location.
@@ -59,7 +61,15 @@ The `prepare` command reads the validated raw manifest, assigns stable zero-base
 Use `--raw-dir`, `--output-dir`, `--positive-rating-threshold`, or `--minimum-positive-history` to override the defaults.
 MovieLens 1M is provided by GroupLens for research use under conditions that require attribution and restrict redistribution and commercial use. Review the [dataset README and license](https://files.grouplens.org/datasets/movielens/ml-1m-README.txt) before use. Publications should cite F. Maxwell Harper and Joseph A. Konstan, “The MovieLens Datasets: History and Context,” ACM TiiS 5(4), 2015, https://doi.org/10.1145/2827872.
 
-Training, evaluation, comparison, and reporting commands are planned but not implemented yet.
+The `evaluate` command fits a selected model using only `train.parquet`, ranks the complete eligible catalog, evaluates against `validation.parquet`, writes a CSV result table and model artifact under `artifacts/`, and logs the run to local MLflow under `mlruns/`. It never reads `test.parquet`; test evaluation remains reserved for the frozen final protocol.
+
+Use `--model popularity`, `--model user_knn`, `--model item_knn`, `--model matrix_factorization`, or `--model bpr`. KNN supports the primary `cosine` setting and the single `adjusted_cosine` validation alternative, with `--n-neighbors`, `--shrinkage`, and `--min-support` controlling the bounded configuration.
+
+Matrix factorization uses seeded mini-batch squared-error training and validation-loss checkpoint selection. BPR uses seeded negative sampling, pairwise ranking loss, and validation-loss checkpoint selection. Configure either learned model with `--latent-dim`, `--learning-rate`, `--regularization`, `--epochs`, and `--batch-size`; BPR also accepts `--negative-samples`.
+
+For example: `uv run recommender evaluate --model matrix_factorization --epochs 20` or `uv run recommender evaluate --model bpr --negative-samples 1`. Each validation run writes a CSV result table and a model artifact (`.json` for popularity/KNN, `.pt` for learned models) under `artifacts/`, and stores its MLflow run under `mlruns/`; both directories are ignored by Git.
+
+The comparison and reporting commands are planned but not implemented yet.
 
 ## Development
 [(Back to top)](#table-of-contents)
