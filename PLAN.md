@@ -177,6 +177,28 @@ Only identifiers, ratings, timestamps, titles, and genres are necessary for v1. 
 
 Processed data will use Parquet with explicit dtypes and deterministic sorting. Every processed directory will contain a manifest sufficient to detect stale or incompatible outputs. Large data, checkpoints, and MLflow artifacts remain local and ignored by Git; configurations, source code, small test fixtures, and final summarized results remain version controlled.
 
+
+### Optional Kaggle execution
+
+The workflow can run on a Kaggle notebook instead of a local MacBook when more compute or a clean temporary environment is preferred. Kaggle must provide Python 3.12 because the project declares `>=3.12,<3.13`; check the notebook runtime before installing dependencies.
+
+```python
+!git clone https://github.com/Creator101-commits/collaborative-filtering-recommender.git
+%cd collaborative-filtering-recommender
+!python --version
+!pip install -e .
+!recommender download
+!recommender prepare
+```
+
+Upload or create the validation-selected `experiment-card.json`, then run the frozen comparison and report commands:
+
+```python
+!recommender compare --experiment-card experiment-card.json
+!recommender report
+```
+
+Kaggle Internet access must be enabled for the download command, or the validated raw dataset must be uploaded. The current implementation trains PyTorch models and runs SciPy KNN on the CPU; selecting a Kaggle GPU does not accelerate the benchmark unless device support is added. Save generated artifacts before the notebook session ends, and do not commit raw data, MLflow runs, checkpoints, or other large artifacts. This note documents an execution option only; it does not complete Phase 10 or replace the required clean-checkout verification.
 ## Evaluation design
 
 ### Primary metrics
@@ -214,7 +236,7 @@ Processed data will use Parquet with explicit dtypes and deterministic sorting. 
 
 Complete the phases in order. Do not start a phase until the previous phase's exit gate passes. Every phase includes its tests and documentation; a phase is not complete when its code exists but its checks fail.
 
-**Current status:** Phases 1 through 7 are complete, including the validation-only runner, popularity and neighborhood models, biased matrix factorization, BPR, shared artifacts, MLflow logging, CLI integration, tests, and documentation. Phase 8 is next; final test evaluation, bootstrap analysis, comparison, and reporting remain intentionally deferred until the protocol is frozen.
+**Current status:** Phases 1 through 9 are implemented and verified. Phase 10 is in progress: the report generator and release documentation are implemented; a clean-checkout workflow run, publication-ready narrative, and v1 release remain.
 
 ### Phase 1: Reproducible project skeleton
 **Status:** Complete.
@@ -347,7 +369,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - The selected configuration is recorded before test evaluation.
 
 ### Phase 8: Lock the comparison protocol
-**Status:** Next.
+**Status:** Complete.
 
 **Depends on:** Phase 7.
 
@@ -366,7 +388,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - No unresolved protocol decision can change after test results are viewed.
 
 ### Phase 9: Final test evaluation and analysis
-**Status:** Planned.
+**Status:** Complete.
 
 **Depends on:** Phase 8.
 
@@ -385,7 +407,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - Final test results are never used to retune or reselect a model.
 
 ### Phase 10: Reproducible report and v1 release
-**Status:** Planned.
+**Status:** In progress.
 
 **Depends on:** Phase 9.
 

@@ -5,7 +5,7 @@
 [![CI](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml/badge.svg)](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/github/license/Creator101-commits/collaborative-filtering-recommender)](./LICENSE)
 
-This project provides a leakage-controlled top-N validation workflow for popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking. Cross-model comparison, final test evaluation, and reporting remain planned. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
+This project provides a leakage-controlled top-N MovieLens 1M benchmark for popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking. Validation selection, frozen test evaluation, bootstrap analysis, and machine-readable comparison tables are implemented; publication-quality reporting remains planned. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
 
 ## Table of Contents
 
@@ -28,6 +28,9 @@ uv sync
 uv run recommender download
 uv run recommender prepare
 uv run recommender evaluate
+# After creating experiment-card.json from validation results:
+uv run recommender compare --experiment-card experiment-card.json
+uv run recommender report
 ```
 
 ## Installation
@@ -52,6 +55,8 @@ uv sync --locked
 uv run recommender download
 uv run recommender prepare
 uv run recommender evaluate
+uv run recommender compare --experiment-card experiment-card.json
+uv run recommender report
 ```
 
 The `download` command fetches from GroupLens, verifies the pinned archive size and checksums, validates every source record, and writes `data/raw/movielens-1m/manifest.json`. Rerunning it reuses the data only when every file still matches the manifest. Use `--output-dir` to choose another location.
@@ -69,7 +74,9 @@ Matrix factorization uses seeded mini-batch squared-error training and validatio
 
 For example: `uv run recommender evaluate --model matrix_factorization --epochs 20` or `uv run recommender evaluate --model bpr --negative-samples 1`. Each validation run writes a CSV result table and a model artifact (`.json` for popularity/KNN, `.pt` for learned models) under `artifacts/`, and stores its MLflow run under `mlruns/`; both directories are ignored by Git.
 
-The comparison and reporting commands are planned but not implemented yet.
+The `compare` command runs the frozen final test evaluation and writes aggregate, bootstrap, paired-difference, and slice CSV tables. The `report` command consumes those tables without retraining and writes `artifacts/report/report.md`, `summary.csv`, and a dependency-free SVG figure.
+
+`EXPERIMENT_CARD.md` freezes the Phase 8 comparison protocol before final test evaluation. The pre-test audit and immutable JSON card helpers are available from `recommender.experiments`; the `compare` command applies the card without retraining or reselecting models.
 
 ## Development
 [(Back to top)](#table-of-contents)

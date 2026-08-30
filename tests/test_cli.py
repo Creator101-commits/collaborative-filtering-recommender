@@ -6,7 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from recommender.cli import app
-from recommender.experiments import ExperimentResult
+from recommender.experiments import ExperimentResult, FinalComparisonResult
 
 
 def test_help() -> None:
@@ -216,3 +216,36 @@ def test_evaluate_bpr_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert captured["latent_dim"] == 8
     assert captured["epochs"] == 4
     assert captured["negative_samples"] == 2
+
+
+def test_compare_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    expected = FinalComparisonResult(
+        results_path=tmp_path / "results.csv",
+        paired_results_path=tmp_path / "paired.csv",
+        slices_path=tmp_path / "slices.csv",
+        tracking_uri="file:///tmp/mlruns",
+        leading_model="popularity",
+    )
+
+    def fake_run(
+        processed_dir: Path, experiment_card: Path, **kwargs: object
+    ) -> FinalComparisonResult:
+        assert processed_dir == tmp_path / "processed"
+        assert experiment_card == tmp_path / "card.json"
+        return expected
+
+    monkeypatch.setattr("recommender.cli.run_final_comparison", fake_run)
+    result = CliRunner().invoke(
+        app,
+        [
+            "compare",
+            "--experiment-card",
+            str(tmp_path / "card.json"),
+            "--processed-dir",
+            str(tmp_path / "processed"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Leading model: popularity" in result.output
+    assert str(expected.results_path) in result.output

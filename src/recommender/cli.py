@@ -16,10 +16,17 @@ from recommender.data import (
 from recommender.experiments import (
     DEFAULT_ARTIFACT_DIR,
     DEFAULT_EXPERIMENT_NAME,
+    DEFAULT_FINAL_ARTIFACT_DIR,
+    DEFAULT_FINAL_TRACKING_DIR,
+    DEFAULT_REPORT_DIR,
     DEFAULT_TRACKING_DIR,
     ExperimentConfig,
     ExperimentError,
+    ProtocolError,
+    ReportError,
+    generate_report,
     run_bpr_baseline,
+    run_final_comparison,
     run_matrix_factorization_baseline,
     run_neighborhood_baseline,
     run_popularity_baseline,
@@ -102,9 +109,7 @@ def evaluate(
     regularization: float = typer.Option(0.0001, help="Matrix-factorization L2 penalty."),
     epochs: int = typer.Option(20, help="Matrix-factorization training epochs."),
     batch_size: int = typer.Option(1024, help="Matrix-factorization mini-batch size."),
-    negative_samples: int = typer.Option(
-        1, help="Negative samples per positive BPR pair."
-    ),
+    negative_samples: int = typer.Option(1, help="Negative samples per positive BPR pair."),
     seed: int = typer.Option(0, help="Experiment seed."),
     experiment_name: str = typer.Option(
         DEFAULT_EXPERIMENT_NAME, help="Local MLflow experiment name."
@@ -168,3 +173,70 @@ def evaluate(
     typer.echo(f"Results: {result.results_path}")
     for name, value in result.metrics.items():
         typer.echo(f"{name}: {value:.6f}")
+
+
+@app.command()
+def compare(
+    experiment_card: Path = typer.Option(
+        Path("experiment-card.json"), help="Frozen experiment card.", file_okay=True, dir_okay=False
+    ),
+    processed_dir: Path = typer.Option(
+        DEFAULT_PROCESSED_DIR, help="Prepared dataset directory.", file_okay=False
+    ),
+    tracking_dir: Path = typer.Option(
+        DEFAULT_FINAL_TRACKING_DIR, help="Local MLflow tracking directory.", file_okay=False
+    ),
+    artifact_dir: Path = typer.Option(
+        DEFAULT_FINAL_ARTIFACT_DIR, help="Final result artifact directory.", file_okay=False
+    ),
+) -> None:
+    """Evaluate the frozen model comparison once against the test split."""
+    try:
+        result = run_final_comparison(
+            processed_dir,
+            experiment_card,
+            tracking_dir=tracking_dir,
+            artifact_dir=artifact_dir,
+        )
+    except (ExperimentError, ProtocolError, ValueError) as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(f"Leading model: {result.leading_model}")
+    typer.echo(f"Results: {result.results_path}")
+    typer.echo(f"Paired results: {result.paired_results_path}")
+    typer.echo(f"Slices: {result.slices_path}")
+
+
+@app.command()
+def report(
+    results_path: Path = typer.Option(
+        DEFAULT_FINAL_ARTIFACT_DIR / "final-results.csv",
+        help="Final aggregate result table.",
+        file_okay=True,
+        dir_okay=False,
+    ),
+    paired_results_path: Path = typer.Option(
+        DEFAULT_FINAL_ARTIFACT_DIR / "paired-results.csv",
+        help="Paired comparison table.",
+        file_okay=True,
+        dir_okay=False,
+    ),
+    slices_path: Path = typer.Option(
+        DEFAULT_FINAL_ARTIFACT_DIR / "final-slices.csv",
+        help="Final slice table.",
+        file_okay=True,
+        dir_okay=False,
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_REPORT_DIR, help="Report output directory.", file_okay=False
+    ),
+) -> None:
+    """Generate the report from final CSV artifacts without retraining."""
+    try:
+        result = generate_report(
+            results_path, paired_results_path, slices_path, output_dir
+        )
+    except ReportError as error:
+        raise typer.BadParameter(str(error)) from error
+    typer.echo(f"Report: {result.report_path}")
+    typer.echo(f"Summary: {result.summary_path}")
+    typer.echo(f"Figure: {result.figure_path}")

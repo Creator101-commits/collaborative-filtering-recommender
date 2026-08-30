@@ -19,6 +19,7 @@ import pyarrow as pa  # type: ignore[import-untyped]
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from recommender.evaluation import evaluate_metrics, generate_candidate_catalog
+from recommender.experiments.protocol import PROTOCOL_VERSION
 from recommender.models import (
     ArtifactMetadata,
     BiasedMatrixFactorizationRecommender,
@@ -50,6 +51,7 @@ class ExperimentConfig:
     positive_rating_threshold: int = 4
     seed: int = 0
     experiment_name: str = DEFAULT_EXPERIMENT_NAME
+    protocol_version: str = PROTOCOL_VERSION
 
     def __post_init__(self) -> None:
         if self.cutoff <= 0:
@@ -58,11 +60,14 @@ class ExperimentConfig:
             raise ValueError("positive_rating_threshold must be between 1 and 5")
         if not self.experiment_name:
             raise ValueError("experiment_name must not be empty")
+        if self.protocol_version != PROTOCOL_VERSION:
+            raise ValueError(f"protocol_version must be {PROTOCOL_VERSION}")
 
     def as_dict(self) -> dict[str, object]:
         return {
             "cutoff": self.cutoff,
             "experiment_name": self.experiment_name,
+            "protocol_version": self.protocol_version,
             "positive_rating_threshold": self.positive_rating_threshold,
             "seed": self.seed,
         }
@@ -284,6 +289,7 @@ def _run_validation_model(
             "inference_seconds": inference_seconds,
             **dict(model_configuration),
             "model": model_name,
+            "protocol_version": PROTOCOL_VERSION,
             "run_id": run_id,
             "seed": config.seed,
             "split": "validation",
@@ -314,6 +320,7 @@ def _run_validation_model(
         mlflow.set_tags(
             {
                 "data_manifest_sha256": manifest_hash,
+                "protocol_version": PROTOCOL_VERSION,
                 "git_revision": git_revision,
                 "model": model_name,
                 "split": "validation",

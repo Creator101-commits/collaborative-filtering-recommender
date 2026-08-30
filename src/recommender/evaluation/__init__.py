@@ -1,5 +1,12 @@
 """Candidate generation and evaluation metrics."""
 
+from recommender.evaluation.analysis import (
+    BootstrapInterval,
+    assign_history_slices,
+    bootstrap_confidence_intervals,
+    paired_bootstrap_confidence_intervals,
+    sliced_means,
+)
 from recommender.evaluation.candidates import (
     candidate_items,
     generate_candidate_catalog,
@@ -30,4 +37,9 @@ __all__ = [
     "ranking_metrics",
     "recall_at_k",
     "generate_candidate_catalog",
+    "BootstrapInterval",
+    "assign_history_slices",
+    "bootstrap_confidence_intervals",
+    "paired_bootstrap_confidence_intervals",
+    "sliced_means",
 ]
