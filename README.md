@@ -1,3 +1,5 @@
+![Banner](./image.png)
+
 # Collaborative Filtering Recommender
 
 > A reproducible MovieLens 1M benchmark for collaborative-filtering recommendation methods.
