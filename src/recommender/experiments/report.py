@@ -1,17 +1,18 @@
-"""Reproducible tables and a dependency-free report for final results."""
+"""Reproducible tables and a Matplotlib report for final results."""
 
 from __future__ import annotations
 
 import csv
+import math
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from html import escape
 from pathlib import Path
 
 from recommender.experiments.protocol import FINAL_MODEL_NAMES
 
 DEFAULT_REPORT_DIR = Path("artifacts/report")
+
 
 class ReportError(ValueError):
     """Raised when final result tables cannot produce a report."""
@@ -39,7 +40,10 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 def _number(row: dict[str, str], key: str, path: Path) -> float:
     try:
-        return float(row[key])
+        value = float(row[key])
+        if not math.isfinite(value):
+            raise ValueError("result must be finite")
+        return value
     except (KeyError, ValueError) as error:
         raise ReportError(f"{path} has invalid numeric field {key}") from error
 
@@ -63,39 +67,25 @@ def _write_figure(path: Path, summary: list[dict[str, object]]) -> None:
     values: dict[str, list[float]] = defaultdict(list)
     for summary_row in summary:
         if summary_row["metric"] == "ndcg@10":
-            values[str(summary_row["model"])].append(
-                float(str(summary_row["estimate"]))
-            )
+            values[str(summary_row["model"])].append(float(str(summary_row["estimate"])))
     if not values:
         raise ReportError("summary has no ndcg@10 rows for the figure")
     models = [name for name in FINAL_MODEL_NAMES if name in values]
-    width, height = 800, 90 + 45 * len(models)
-    chart_width = 560
-    bars = []
-    for index, model in enumerate(models):
-        value = _mean(values[model])
-        y = 45 + index * 45
-        bars.append(
-            f'<text x="10" y="{y + 16}" font-size="13">{escape(model)}</text>'
-            f'<rect x="220" y="{y}" width="{value * chart_width:.2f}" height="24" fill="#2f6690" />'
-            f'<text x="{230 + value * chart_width:.2f}" y="{y + 17}" '
-            f'font-size="12">{value:.4f}</text>'
-        )
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(9, max(3, len(models) * 0.6)))
+    scores = [_mean(values[name]) for name in models]
+    bars = ax.barh(models, scores, color="#2f6690")
+    ax.invert_yaxis()
+    ax.set(xlim=(0, 1), xlabel="NDCG@10", title="Mean test NDCG@10 across declared seeds")
+    ax.bar_label(bars, fmt="%.4f", padding=4)
+    fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "\n".join(
-            [
-                f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-                f'viewBox="0 0 {width} {height}">',
-                '<rect width="100%" height="100%" fill="white" />',
-                '<text x="10" y="25" font-size="16" font-weight="bold">'
-                "Mean test NDCG@10 by model and declared seed</text>",
-                *bars,
-                "</svg>",
-            ]
-        ),
-        encoding="utf-8",
-    )
+    fig.savefig(path, dpi=180)
+    plt.close(fig)
 
 
 def generate_report(
@@ -104,7 +94,7 @@ def generate_report(
     slices_path: Path,
     output_dir: Path,
 ) -> ReportResult:
-    """Generate tables, an SVG figure, and Markdown from final CSV artifacts."""
+    """Generate tables, a Matplotlib PNG figure, and Markdown from final CSV artifacts."""
     results = _read_csv(results_path)
     paired = _read_csv(paired_results_path)
     slices = _read_csv(slices_path)
@@ -122,7 +112,7 @@ def generate_report(
                     "artifact_path": row.get("artifact_path", ""),
                     "ci_high": _number(row, f"{metric}_ci_high", results_path),
                     "ci_low": _number(row, f"{metric}_ci_low", results_path),
-                    "estimate": _number(row, metric, results_path),
+                    "estimate": _number(row, f"{metric}_estimate", results_path),
                     "metric": metric,
                     "model": model,
                     "run_id": row.get("run_id", ""),
@@ -134,7 +124,7 @@ def generate_report(
     order = {name: index for index, name in enumerate(FINAL_MODEL_NAMES)}
     summary.sort(key=lambda row: (order[str(row["model"])], str(row["metric"]), str(row["seed"])))
     summary_path = output_dir / "summary.csv"
-    figure_path = output_dir / "ndcg-at-10.svg"
+    figure_path = output_dir / "ndcg-at-10.png"
     report_path = output_dir / "report.md"
     _write_csv(summary_path, summary)
     _write_figure(figure_path, summary)
@@ -142,9 +132,7 @@ def generate_report(
     ndcg = [row for row in summary if row["metric"] == "ndcg@10"]
     model_values: dict[str, list[float]] = defaultdict(list)
     for summary_row in ndcg:
-        model_values[str(summary_row["model"])].append(
-            float(str(summary_row["estimate"]))
-        )
+        model_values[str(summary_row["model"])].append(float(str(summary_row["estimate"])))
     table = [
         "| Model | Mean NDCG@10 | Declared seeds |",
         "|---|---:|---:|",
@@ -152,8 +140,7 @@ def generate_report(
     for model in FINAL_MODEL_NAMES:
         if model in model_values:
             table.append(
-                f"| {model} | {_mean(model_values[model]):.4f} | "
-                f"{len(model_values[model])} |"
+                f"| {model} | {_mean(model_values[model]):.4f} | {len(model_values[model])} |"
             )
     paired_lines = [
         f"- `{row.get('leading_model', '')}` minus `{row.get('baseline_model', '')}` "
@@ -189,7 +176,9 @@ def generate_report(
             "## Limitations",
             "",
             "Bootstrap intervals resample users and do not model every dependency caused by "
-            "shared items. Results should be interpreted with the recorded configuration, "
+            "shared items. The leading model is chosen descriptively from these test scores, "
+            "so paired intervals against it are exploratory and do not adjust for selection. "
+            "Results should be interpreted with the recorded configuration, "
             "manifest hash, run IDs, and Git revision.",
             "",
         ]

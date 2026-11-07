@@ -257,8 +257,7 @@ class BayesianPersonalizedRankingRecommender:
                 raise ValueError("validation interactions contain no positive ratings")
 
         blocked_by_user = {
-            user_idx: set(seen_by_user.get(user_idx, set()))
-            for user_idx in set(positive_users)
+            user_idx: set(seen_by_user.get(user_idx, set())) for user_idx in set(positive_users)
         }
         for user_idx, items in validation_seen.items():
             blocked_by_user.setdefault(user_idx, set()).update(items)
@@ -315,9 +314,7 @@ class BayesianPersonalizedRankingRecommender:
                 batch_users = users[batch]
                 batch_positives = positives[batch]
                 batch_negatives = negatives[batch]
-                loss = self._pairwise_loss(
-                    network, batch_users, batch_positives, batch_negatives
-                )
+                loss = self._pairwise_loss(network, batch_users, batch_positives, batch_negatives)
                 penalty = (
                     network.user_factors(batch_users).square().mean()
                     + network.item_factors(batch_positives).square().mean()
@@ -359,9 +356,7 @@ class BayesianPersonalizedRankingRecommender:
         if not 0 <= user_idx < self.user_count:
             raise ValueError("user_idx is outside the user catalog")
         items = list(item_indices)
-        if any(
-            not isinstance(item_idx, int) or isinstance(item_idx, bool) for item_idx in items
-        ):
+        if any(not isinstance(item_idx, int) or isinstance(item_idx, bool) for item_idx in items):
             raise ValueError("item indices must be integers")
         if any(not 0 <= item_idx < self.item_count for item_idx in items):
             raise ValueError("item_idx is outside the item catalog")
@@ -427,7 +422,7 @@ class BayesianPersonalizedRankingRecommender:
     @classmethod
     def load(cls, path: Path) -> Self:
         try:
-            value = torch.load(path, map_location="cpu", weights_only=False)
+            value = torch.load(path, map_location="cpu", weights_only=True)
         except (OSError, RuntimeError, EOFError, pickle.UnpicklingError) as error:
             raise ValueError(f"cannot read recommender artifact {path}: {error}") from error
         if not isinstance(value, Mapping) or value.get("artifact_version") != ARTIFACT_VERSION:

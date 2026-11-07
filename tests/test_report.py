@@ -13,7 +13,7 @@ def _write(path: Path, fieldnames: list[str], rows: list[dict[str, object]]) -> 
         writer.writerows(rows)
 
 
-def test_generate_report_writes_summary_markdown_and_svg(tmp_path: Path) -> None:
+def test_generate_report_writes_summary_markdown_and_png(tmp_path: Path) -> None:
     results = tmp_path / "final-results.csv"
     paired = tmp_path / "paired-results.csv"
     slices = tmp_path / "final-slices.csv"
@@ -66,4 +66,4 @@ def test_generate_report_writes_summary_markdown_and_svg(tmp_path: Path) -> None
 
     assert result.report_path.read_text(encoding="utf-8").startswith("# Final comparison report")
     assert "popularity" in result.summary_path.read_text(encoding="utf-8")
-    assert "<svg" in result.figure_path.read_text(encoding="utf-8")
+    assert result.figure_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")

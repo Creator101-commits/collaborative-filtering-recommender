@@ -160,9 +160,7 @@ class BiasedMatrixFactorizationRecommender:
         return network
 
     @staticmethod
-    def _predict(
-        network: _BiasedModel, users: torch.Tensor, items: torch.Tensor
-    ) -> torch.Tensor:
+    def _predict(network: _BiasedModel, users: torch.Tensor, items: torch.Tensor) -> torch.Tensor:
         model = network
         return cast(
             torch.Tensor,
@@ -204,8 +202,9 @@ class BiasedMatrixFactorizationRecommender:
                 batch = order[start : start + self.config.batch_size]
                 predictions = self._predict(network, train_users[batch], train_items[batch])
                 error = predictions - train_ratings[batch]
-                factors = network.user_factors(train_users[batch]), network.item_factors(
-                    train_items[batch]
+                factors = (
+                    network.user_factors(train_users[batch]),
+                    network.item_factors(train_items[batch]),
                 )
                 penalty = sum(parameter.square().mean() for parameter in factors)
                 loss = error.square().mean() + self.config.regularization * penalty
@@ -307,7 +306,7 @@ class BiasedMatrixFactorizationRecommender:
     @classmethod
     def load(cls, path: Path) -> Self:
         try:
-            value = torch.load(path, map_location="cpu", weights_only=False)
+            value = torch.load(path, map_location="cpu", weights_only=True)
         except (OSError, RuntimeError, EOFError, pickle.UnpicklingError) as error:
             raise ValueError(f"cannot read recommender artifact {path}: {error}") from error
         if not isinstance(value, Mapping) or value.get("artifact_version") != ARTIFACT_VERSION:

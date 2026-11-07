@@ -121,8 +121,7 @@ def _adjusted_values(
         sums = values.sum(axis=1).tolist()
         counts = presence.sum(axis=1).tolist()
         means = [
-            float(row[0]) / float(count[0]) if count[0] else 0.0
-            for row, count in zip(sums, counts)
+            float(row[0]) / float(count[0]) if count[0] else 0.0 for row, count in zip(sums, counts)
         ]
         for row_index in range(centered.shape[0]):
             start, stop = centered.indptr[row_index : row_index + 2]
@@ -131,16 +130,13 @@ def _adjusted_values(
         sums = values.sum(axis=0).tolist()[0]
         counts = presence.sum(axis=0).tolist()[0]
         means = [
-            float(total) / float(count) if count else 0.0
-            for total, count in zip(sums, counts)
+            float(total) / float(count) if count else 0.0 for total, count in zip(sums, counts)
         ]
         for row_index in range(centered.shape[0]):
             start, stop = centered.indptr[row_index : row_index + 2]
             for position in range(start, stop):
                 centered.data[position] -= means[centered.indices[position]]
     return centered
-
-
 
 
 def _neighbor_matrix(
@@ -310,9 +306,7 @@ class _NeighborhoodRecommender:
         presence.data.fill(1.0)
         self._entity_matrix = entity_matrix
         self._presence_matrix = presence
-        self._neighbors = _neighbor_matrix(
-            entity_matrix, presence, self.config, self.orientation
-        )
+        self._neighbors = _neighbor_matrix(entity_matrix, presence, self.config, self.orientation)
         self.metadata = None
         self._fitted = True
         return self
@@ -362,7 +356,7 @@ class _NeighborhoodRecommender:
         seen_items = (
             self._entity_matrix.getrow(user_idx).indices
             if self.orientation == "user"
-            else self._entity_matrix.getcol(user_idx).indices
+            else self._entity_matrix.getcol(user_idx).tocoo().row
         )
         candidate_set.difference_update(int(item_idx) for item_idx in seen_items)
         return sorted(candidate_set, key=lambda item: (-scores[item], item))[:cutoff]
@@ -434,9 +428,7 @@ class _NeighborhoodRecommender:
         entity_matrix = _matrix_from_payload(model_value.get("ratings"), "ratings")
         neighbors = _matrix_from_payload(model_value.get("neighbors"), "neighbors")
         expected_entity_shape = (
-            (user_count, item_count)
-            if cls.orientation == "user"
-            else (item_count, user_count)
+            (user_count, item_count) if cls.orientation == "user" else (item_count, user_count)
         )
         if entity_matrix.shape != expected_entity_shape:
             raise ValueError("artifact ratings shape does not match recommender orientation")

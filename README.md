@@ -7,7 +7,7 @@
 [![CI](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml/badge.svg)](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/github/license/Creator101-commits/collaborative-filtering-recommender)](./LICENSE)
 
-This project provides a leakage-controlled top-N MovieLens 1M benchmark for popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking. Validation selection, frozen test evaluation, bootstrap analysis, and machine-readable comparison tables are implemented; publication-quality reporting remains planned. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
+This project provides a leakage-controlled top-N MovieLens 1M benchmark for popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking. Validation selection, frozen test evaluation, bootstrap analysis, and machine-readable comparison tables are implemented; Matplotlib reporting is available. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
 
 ## Table of Contents
 
@@ -76,7 +76,7 @@ Matrix factorization uses seeded mini-batch squared-error training and validatio
 
 For example: `uv run recommender evaluate --model matrix_factorization --epochs 20` or `uv run recommender evaluate --model bpr --negative-samples 1`. Each validation run writes a CSV result table and a model artifact (`.json` for popularity/KNN, `.pt` for learned models) under `artifacts/`, and stores its MLflow run under `mlruns/`; both directories are ignored by Git.
 
-The `compare` command runs the frozen final test evaluation and writes aggregate, bootstrap, paired-difference, and slice CSV tables. The `report` command consumes those tables without retraining and writes `artifacts/report/report.md`, `summary.csv`, and a dependency-free SVG figure.
+The `compare` command runs the frozen final test evaluation and writes aggregate, bootstrap, paired-difference, and slice CSV tables. The `report` command consumes those tables without retraining and writes `artifacts/report/report.md`, `summary.csv`, and a Matplotlib PNG figure.
 
 `EXPERIMENT_CARD.md` freezes the Phase 8 comparison protocol before final test evaluation. The pre-test audit and immutable JSON card helpers are available from `recommender.experiments`; the `compare` command applies the card without retraining or reselecting models.
 
@@ -119,3 +119,11 @@ Distributed under the MIT License. See [`LICENSE`](./LICENSE) for details.
 Sreeharsha Kannegundla
 
 Project: [github.com/Creator101-commits/collaborative-filtering-recommender](https://github.com/Creator101-commits/collaborative-filtering-recommender)
+
+## Interpretation limits
+
+The README figure uses a tiny synthetic four-user fixture, not measured MovieLens 1M scores. Full benchmark results require the validated dataset and a frozen experiment card. Final comparison refits train-only models for the epochs frozen in that card; validation checkpoint epochs must be copied into the selected configuration. The reported leading model is descriptive from test scores, so paired intervals against it are exploratory and unadjusted for selection. Per-user chronology does not impose a single global time cutoff across all users.
+
+## Reproducing the figure
+
+`image.png` contains only Matplotlib graphs. Run `PYTHONPATH=src python scripts/render_figure.py` in a Python environment containing the project dependencies and Matplotlib. The plotting environment is separate from the core runtime when Matplotlib is absent. `scripts/figure-data.json` stores the plotted measurements or analytical inputs. Captions distinguish real packaged datasets, synthetic fixtures, analytical calculations, and local timings. No GPU performance is inferred from CPU demonstrations.

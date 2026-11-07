@@ -13,6 +13,8 @@ def _validate_cutoff(cutoff: int) -> None:
 
 def _top(recommended: Sequence[int], cutoff: int) -> Sequence[int]:
     _validate_cutoff(cutoff)
+    if len(set(recommended)) != len(recommended):
+        raise ValueError("recommendations must not contain duplicate items")
     return recommended[:cutoff]
 
 
@@ -31,9 +33,7 @@ def ndcg_at_k(recommended: Sequence[int], relevant: Collection[int], cutoff: int
     if not relevant_set:
         return 0.0
     dcg = sum(
-        1.0 / math.log2(rank + 2)
-        for rank, item_idx in enumerate(top)
-        if item_idx in relevant_set
+        1.0 / math.log2(rank + 2) for rank, item_idx in enumerate(top) if item_idx in relevant_set
     )
     ideal_hits = min(len(relevant_set), cutoff)
     ideal_dcg = sum(1.0 / math.log2(rank + 2) for rank in range(ideal_hits))
@@ -163,8 +163,7 @@ def gini_exposure(
         return 0.0
     ordered = sorted(exposure)
     numerator = sum(
-        (2 * (index + 1) - catalog_size - 1) * value
-        for index, value in enumerate(ordered)
+        (2 * (index + 1) - catalog_size - 1) * value for index, value in enumerate(ordered)
     )
     return numerator / (catalog_size * total)
 
@@ -188,8 +187,6 @@ def evaluate_metrics(
         f"mean_popularity@{cutoff}": mean_recommended_popularity(
             recommendations, item_popularity, cutoff
         ),
-        f"novelty@{cutoff}": mean_novelty(
-            recommendations, item_popularity, catalog_size, cutoff
-        ),
+        f"novelty@{cutoff}": mean_novelty(recommendations, item_popularity, catalog_size, cutoff),
         f"gini_exposure@{cutoff}": gini_exposure(recommendations, catalog_size, cutoff),
     }
