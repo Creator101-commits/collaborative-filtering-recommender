@@ -231,8 +231,9 @@ def main() -> None:
 
     validation_csv = BENCH / "validation-results.csv"
     if validation_rows:
+        fieldnames = sorted({key for row in validation_rows for key in row})
         with validation_csv.open("w", newline="", encoding="utf-8") as output:
-            writer = csv.DictWriter(output, fieldnames=list(validation_rows[0]))
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(validation_rows)
 
