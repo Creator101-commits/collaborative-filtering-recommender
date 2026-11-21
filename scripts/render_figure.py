@@ -1,130 +1,244 @@
-"""Reproduce image.png from actual code outputs; no invented benchmark values.
+"""Reproduce image.png from curated results/ benchmark outputs.
 
-Requires the project dependencies and an environment with Matplotlib installed.
-Run from the repository root with PYTHONPATH=src python scripts/render_figure.py.
+Reads ``results/final-results.csv``, ``results/validation-results.csv``,
+and ``results/manifest.json`` and renders three panels: frozen-test
+recall@10 and ndcg@10 with bootstrap intervals per model (per-seed spread
+for the stochastic models), the validation KNN aggregation comparison,
+and the test popularity-bias profile. Writes ``figure-data.json`` with
+the plotted values so every number traces to results/.
+
+Requires the project dependencies and an environment with Matplotlib,
+e.g. ``uv run --with matplotlib python scripts/render_figure.py``.
 """
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-
-from recommender.evaluation.metrics import ndcg_at_k, recall_at_k
-from recommender.models import (
-    BiasedMatrixFactorizationRecommender,
-    BPRRecommender,
-    ItemKNNRecommender,
-    PopularityRecommender,
-    UserKNNRecommender,
-)
 
 matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.lines import Line2D
 
 plt.rcParams.update(
     {
         "font.family": "DejaVu Sans",
-        "font.size": 11,
+        "font.size": 10,
         "axes.spines.top": False,
         "axes.spines.right": False,
         "axes.titleweight": "bold",
         "figure.facecolor": "white",
     }
 )
-COLORS = ["#4169e1", "#10a68b", "#d95f45", "#8659cf", "#64748b"]
 ROOT = Path(__file__).resolve().parents[1]
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.8), layout="constrained")
+RESULTS = ROOT / "results"
 
-
-pairs = [
-    (0, 0, 5),
-    (0, 1, 4),
-    (0, 2, 1),
-    (1, 1, 5),
-    (1, 2, 4),
-    (1, 3, 2),
-    (2, 2, 5),
-    (2, 3, 4),
-    (2, 4, 1),
-    (3, 3, 5),
-    (3, 4, 4),
-    (3, 5, 2),
-]
-rows = [dict(user_idx=u, item_idx=i, rating=r) for u, i, r in pairs]
-held_out = {0: {3}, 1: {4}, 2: {5}, 3: {0}}
-matrix = np.full((4, 6), np.nan)
-for u, i, r in pairs:
-    matrix[u, i] = r
-image = axes[0].imshow(matrix, vmin=1, vmax=5, cmap="Blues", aspect="auto")
-axes[0].set(
-    xticks=range(6),
-    yticks=range(4),
-    xlabel="Item index",
-    ylabel="User index",
-    title="Training ratings (12 fixture rows)",
-)
-fig.colorbar(image, ax=axes[0], shrink=0.75, label="Rating; blank = unseen")
-models = {
-    "Popularity": PopularityRecommender(6),
-    "User KNN": UserKNNRecommender(4, 6),
-    "Item KNN": ItemKNNRecommender(4, 6),
-    "MF": BiasedMatrixFactorizationRecommender(4, 6, epochs=20, latent_dim=4),
-    "BPR": BPRRecommender(4, 6, epochs=20, latent_dim=4),
+MODEL_ORDER = ["popularity", "user_knn", "item_knn", "matrix_factorization", "bpr"]
+MODEL_LABELS = {
+    "popularity": "Popularity",
+    "user_knn": "User KNN",
+    "item_knn": "Item KNN",
+    "matrix_factorization": "MF",
+    "bpr": "BPR",
 }
-ndcg, recall, scores = [], [], []
-for name, model in models.items():
-    model.fit(rows, seed=42)
-    recommendations = {}
-    for u in range(4):
-        seen = {i for user, i, _ in pairs if user == u}
-        recommendations[u] = list(model.recommend(u, set(range(6)) - seen, 2))
-    ndcg.append(float(np.mean([ndcg_at_k(recommendations[u], held_out[u], 2) for u in range(4)])))
-    recall.append(
-        float(np.mean([recall_at_k(recommendations[u], held_out[u], 2) for u in range(4)]))
-    )
-    scores.append([model.score(0, i) for i in (3, 4, 5)])
-x = np.arange(len(models))
-axes[1].bar(x - 0.18, ndcg, 0.36, label="NDCG@2", color=COLORS[0])
-axes[1].bar(x + 0.18, recall, 0.36, label="Recall@2", color=COLORS[1])
-axes[1].set(
-    xticks=x, xticklabels=list(models), ylim=(0, 1.12), title="Measured tiny-fixture ranking"
-)
-axes[1].tick_params(axis="x", rotation=25)
-axes[1].legend(fontsize=9)
-# Scores from the same model share a scale; cross-model scores do not.
-axes[2].bar(["Item 3", "Item 4", "Item 5"], scores[2], color=COLORS[2])
-axes[2].set(title="Item KNN: user 0 unseen items", ylabel="Weighted rating score")
-fig.suptitle("Collaborative filtering | reproducible four-user demonstration", fontsize=16)
-fig.supxlabel(
-    "Synthetic interactions, six-item catalog, seed 42. These are not MovieLens 1M "
-    "benchmark results.",
-    fontsize=10,
-)
-payload = {
-    "source": "explicit synthetic 4-user, 6-item fixture",
-    "training": rows,
-    "held_out": {str(u): sorted(v) for u, v in held_out.items()},
-    "models": list(models),
-    "ndcg_at_2": ndcg,
-    "recall_at_2": recall,
-    "user_0_unseen_scores": scores,
+MODEL_COLORS = {
+    "popularity": "#64748b",
+    "user_knn": "#4169e1",
+    "item_knn": "#10a68b",
+    "matrix_factorization": "#d95f45",
+    "bpr": "#8659cf",
 }
+AGG_COLORS = {"weighted_mean": "#94a3b8", "weighted_sum": "#d95f45"}
 
-source_hash = hashlib.sha256()
-for source_path in sorted((ROOT / "src").rglob("*.py")):
-    source_hash.update(str(source_path.relative_to(ROOT)).encode())
-    source_hash.update(source_path.read_bytes())
-payload["source_sha256"] = source_hash.hexdigest()
 
-for ax in axes:
-    ax.set_axisbelow(True)
+def _rows(name: str) -> list[dict[str, str]]:
+    with (RESULTS / name).open(newline="", encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def _f(value: str) -> float:
+    return float(value)
+
+
+def main() -> None:
+    final = _rows("final-results.csv")
+    validation = _rows("validation-results.csv")
+    manifest = json.loads((RESULTS / "manifest.json").read_text(encoding="utf-8"))
+
+    fig, axes = plt.subplots(1, 3, figsize=(17, 5.2), layout="constrained")
+
+    # Panel 1: test recall@10 (solid) and ndcg@10 (hollow) with CIs.
+    ax = axes[0]
+    xticks = np.arange(len(MODEL_ORDER))
+    metric_specs = [
+        ("recall@10", "recall@10_estimate", "recall@10_ci_low", "recall@10_ci_high", True),
+        ("ndcg@10", "ndcg@10_estimate", "ndcg@10_ci_low", "ndcg@10_ci_high", False),
+    ]
+    panel1_payload: dict[str, Any] = {}
+    offset = {"recall@10": -0.16, "ndcg@10": 0.16}
+    for metric, est_col, lo_col, hi_col, solid in metric_specs:
+        for i, model in enumerate(MODEL_ORDER):
+            seeds = [r for r in final if r["model"] == model]
+            ests = np.array([_f(r[est_col]) for r in seeds])
+            mean_est = float(ests.mean())
+            # Mean CI bounds across seeds for the error bar.
+            lo = float(np.mean([_f(r[lo_col]) for r in seeds]))
+            hi = float(np.mean([_f(r[hi_col]) for r in seeds]))
+            x = i + offset[metric]
+            color = MODEL_COLORS[model]
+            if solid:
+                ax.errorbar(
+                    x, mean_est, yerr=[[mean_est - lo], [hi - mean_est]],
+                    fmt="o", ms=6, color=color, ecolor=color, elinewidth=1.4,
+                    capsize=3, alpha=0.9,
+                )
+            else:
+                ax.errorbar(
+                    x, mean_est, yerr=[[mean_est - lo], [hi - mean_est]],
+                    fmt="o", ms=6, mfc="white", mec=color, color=color,
+                    ecolor=color, elinewidth=1.2, capsize=3, alpha=0.9,
+                )
+            # Per-seed spread for stochastic models.
+            if len(seeds) > 1:
+                ax.plot(
+                    np.full(len(seeds), x) + np.linspace(-0.05, 0.05, len(seeds)),
+                    ests, "|", color=color, ms=8, mew=1.2, alpha=0.8,
+                )
+            panel1_payload.setdefault(model, {})[metric] = {
+                "seeds": [float(r[est_col]) for r in seeds],
+                "mean": mean_est,
+                "ci_low_mean": lo,
+                "ci_high_mean": hi,
+            }
+    ax.set_xticks(xticks, [MODEL_LABELS[m] for m in MODEL_ORDER], fontsize=9)
+    ax.set_ylabel("Score")
+    ax.set_title("Frozen test metrics (95% bootstrap CI)")
+    ax.set_ylim(0, 0.13)
     ax.grid(axis="y", alpha=0.2)
-fig.savefig(ROOT / "image.png", dpi=180, metadata={"Software": "Matplotlib"})
-plt.close(fig)
-(ROOT / "scripts" / "figure-data.json").write_text(
-    json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8"
-)
+    ax.legend(
+        handles=[
+            Line2D([0], [0], marker="o", color="#334155", ls="",
+                   label="recall@10 (solid)"),
+            Line2D([0], [0], marker="o", mfc="white", mec="#334155", ls="",
+                   label="ndcg@10 (hollow)"),
+            Line2D([0], [0], marker="|", color="#334155", ls="",
+                   label="per-seed value"),
+        ],
+        fontsize=8, loc="upper right",
+    )
+
+    # Panel 2: validation KNN aggregation comparison (recall@10, log y).
+    ax = axes[1]
+    knn_rows = [r for r in validation if r["model"] in ("user_knn", "item_knn")]
+    groups = []
+    for model in ("user_knn", "item_knn"):
+        for sim in ("cosine", "adjusted_cosine"):
+            groups.append((model, sim))
+    gpos = np.arange(len(groups))
+    agg_offset = {"weighted_mean": -0.18, "weighted_sum": 0.18}
+    panel2_payload: dict[str, Any] = {}
+    for agg in ("weighted_mean", "weighted_sum"):
+        for j, (model, sim) in enumerate(groups):
+            match = [
+                r for r in knn_rows
+                if r["model"] == model
+                and json.loads(r["config"]).get("similarity") == sim
+                and json.loads(r["config"]).get("aggregation") == agg
+            ]
+            if not match:
+                continue
+            r = match[0]
+            val = _f(r["recall@10"])
+            x = gpos[j] + agg_offset[agg]
+            ax.plot(x, val, "o", ms=8, color=AGG_COLORS[agg])
+            ax.annotate(f"{val:.3f}", (x, val), xytext=(0, 7),
+                        textcoords="offset points", ha="center", fontsize=7.5)
+            panel2_payload[f"{model}/{sim}/{agg}"] = {
+                "recall@10": val,
+                "ndcg@10": _f(r["ndcg@10"]),
+                "mean_popularity@10": _f(r["mean_popularity@10"]),
+            }
+    ax.set_yscale("log")
+    ax.set_xticks(gpos, [f"{MODEL_LABELS[m]}\n{sim.replace('_', ' ')}"
+                         for m, sim in groups], fontsize=8)
+    ax.set_ylabel("Validation recall@10 (log scale)")
+    ax.set_title("KNN aggregation: weighted_mean vs weighted_sum")
+    ax.grid(axis="y", alpha=0.2)
+    ax.legend(
+        handles=[
+            Line2D([0], [0], marker="o", color=AGG_COLORS["weighted_sum"], ls="",
+                   label="weighted_sum"),
+            Line2D([0], [0], marker="o", color=AGG_COLORS["weighted_mean"], ls="",
+                   label="weighted_mean"),
+        ],
+        fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2,
+    )
+
+    # Panel 3: popularity bias, mean_popularity@10 per model on test.
+    ax = axes[2]
+    pops = []
+    for model in MODEL_ORDER:
+        seeds = [r for r in final if r["model"] == model]
+        pops.append(float(np.mean([_f(r["mean_popularity@10"]) for r in seeds])))
+    ax.bar(
+        xticks, pops,
+        color=[MODEL_COLORS[m] for m in MODEL_ORDER], width=0.62,
+    )
+    for i, v in enumerate(pops):
+        ax.annotate(f"{v:,.0f}", (i, v), xytext=(0, 4),
+                    textcoords="offset points", ha="center", fontsize=8)
+    ax.set_xticks(xticks, [MODEL_LABELS[m] for m in MODEL_ORDER], fontsize=9)
+    ax.set_ylabel("mean_popularity@10")
+    ax.set_title("Popularity of recommended items (test)")
+    ax.set_ylim(0, max(pops) * 1.18)
+    ax.grid(axis="y", alpha=0.2)
+
+    fig.suptitle(
+        "Collaborative filtering benchmark | frozen test and validation results",
+        fontsize=15,
+    )
+    fig.supxlabel(
+        f"Source: results/final-results.csv and results/validation-results.csv, "
+        f"git_sha {manifest.get('git_sha', 'unknown')}, "
+        f"protocol {manifest.get('protocol_version', 'unknown')}.",
+        fontsize=9,
+    )
+
+    payload = {
+        "source": "results/ CSVs copied unedited from the Kaggle benchmark run",
+        "git_sha": manifest.get("git_sha"),
+        "protocol_version": manifest.get("protocol_version"),
+        "test_metrics": panel1_payload,
+        "knn_validation": panel2_payload,
+        "mean_popularity_at_10": {
+            MODEL_LABELS[m]: pops[i] for i, m in enumerate(MODEL_ORDER)
+        },
+    }
+    source_hash = hashlib.sha256()
+    for name in (
+        "final-results.csv", "validation-results.csv", "manifest.json",
+        "paired-results.csv",
+    ):
+        path = RESULTS / name
+        if path.exists():
+            source_hash.update(name.encode())
+            source_hash.update(path.read_bytes())
+    payload["results_sha256"] = source_hash.hexdigest()
+
+    fig.savefig(ROOT / "image.png", dpi=180, metadata={"Software": "Matplotlib"})
+    plt.close(fig)
+    (ROOT / "scripts" / "figure-data.json").write_text(
+        json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    )
+    print(f"wrote {ROOT / 'image.png'} and scripts/figure-data.json")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,128 +1,155 @@
 {
-  "source": "explicit synthetic 4-user, 6-item fixture",
-  "training": [
-    {
-      "user_idx": 0,
-      "item_idx": 0,
-      "rating": 5
+  "source": "results/ CSVs copied unedited from the Kaggle benchmark run",
+  "git_sha": "045f514a9df574d236a230fd1f00053d351a777a",
+  "protocol_version": "phase-8-v3",
+  "test_metrics": {
+    "popularity": {
+      "recall@10": {
+        "seeds": [
+          0.044241922120961064
+        ],
+        "mean": 0.044241922120961064,
+        "ci_low_mean": 0.039105219552609774,
+        "ci_high_mean": 0.04954432477216238
+      },
+      "ndcg@10": {
+        "seeds": [
+          0.02217056981996731
+        ],
+        "mean": 0.02217056981996731,
+        "ci_low_mean": 0.01936027219822464,
+        "ci_high_mean": 0.0251520090087032
+      }
     },
-    {
-      "user_idx": 0,
-      "item_idx": 1,
-      "rating": 4
+    "user_knn": {
+      "recall@10": {
+        "seeds": [
+          0.09776304888152444
+        ],
+        "mean": 0.09776304888152444,
+        "ci_low_mean": 0.09030654515327258,
+        "ci_high_mean": 0.10538525269262634
+      },
+      "ndcg@10": {
+        "seeds": [
+          0.049078331035273544
+        ],
+        "mean": 0.049078331035273544,
+        "ci_low_mean": 0.04491941499264467,
+        "ci_high_mean": 0.05329037405148783
+      }
     },
-    {
-      "user_idx": 0,
-      "item_idx": 2,
-      "rating": 1
+    "item_knn": {
+      "recall@10": {
+        "seeds": [
+          0.09809444904722453
+        ],
+        "mean": 0.09809444904722453,
+        "ci_low_mean": 0.09063794531897267,
+        "ci_high_mean": 0.10571665285832643
+      },
+      "ndcg@10": {
+        "seeds": [
+          0.04905871686692848
+        ],
+        "mean": 0.04905871686692848,
+        "ci_low_mean": 0.04494167452240756,
+        "ci_high_mean": 0.05328523461515983
+      }
     },
-    {
-      "user_idx": 1,
-      "item_idx": 1,
-      "rating": 5
+    "matrix_factorization": {
+      "recall@10": {
+        "seeds": [
+          0.041425020712510356,
+          0.041425020712510356,
+          0.04192212096106048
+        ],
+        "mean": 0.04159072079536039,
+        "ci_low_mean": 0.03667357083678543,
+        "ci_high_mean": 0.04672742336371168
+      },
+      "ndcg@10": {
+        "seeds": [
+          0.019425526626619352,
+          0.01933070754323432,
+          0.019081265433850057
+        ],
+        "mean": 0.019279166534567908,
+        "ci_low_mean": 0.016772849323001705,
+        "ci_high_mean": 0.02192507680501689
+      }
     },
-    {
-      "user_idx": 1,
-      "item_idx": 2,
-      "rating": 4
-    },
-    {
-      "user_idx": 1,
-      "item_idx": 3,
-      "rating": 2
-    },
-    {
-      "user_idx": 2,
-      "item_idx": 2,
-      "rating": 5
-    },
-    {
-      "user_idx": 2,
-      "item_idx": 3,
-      "rating": 4
-    },
-    {
-      "user_idx": 2,
-      "item_idx": 4,
-      "rating": 1
-    },
-    {
-      "user_idx": 3,
-      "item_idx": 3,
-      "rating": 5
-    },
-    {
-      "user_idx": 3,
-      "item_idx": 4,
-      "rating": 4
-    },
-    {
-      "user_idx": 3,
-      "item_idx": 5,
-      "rating": 2
+    "bpr": {
+      "recall@10": {
+        "seeds": [
+          0.07125103562551781,
+          0.06296603148301574,
+          0.06843413421706711
+        ],
+        "mean": 0.06755040044186689,
+        "ci_low_mean": 0.0611985639326153,
+        "ci_high_mean": 0.07390223695111847
+      },
+      "ndcg@10": {
+        "seeds": [
+          0.03453241280145748,
+          0.03132130842367223,
+          0.03283772246515302
+        ],
+        "mean": 0.03289714789676091,
+        "ci_low_mean": 0.02948793855522076,
+        "ci_high_mean": 0.036381452763614076
+      }
     }
-  ],
-  "held_out": {
-    "0": [
-      3
-    ],
-    "1": [
-      4
-    ],
-    "2": [
-      5
-    ],
-    "3": [
-      0
-    ]
   },
-  "models": [
-    "Popularity",
-    "User KNN",
-    "Item KNN",
-    "MF",
-    "BPR"
-  ],
-  "ndcg_at_2": [
-    0.4077324383928644,
-    0.25,
-    0.4077324383928644,
-    0.4077324383928644,
-    0.4077324383928644
-  ],
-  "recall_at_2": [
-    0.5,
-    0.25,
-    0.5,
-    0.5,
-    0.5
-  ],
-  "user_0_unseen_scores": [
-    [
-      2.0,
-      1.0,
-      0.0
-    ],
-    [
-      2.2104906943141667,
-      1.0,
-      0.0
-    ],
-    [
-      1.4940830207038969,
-      1.0,
-      0.0
-    ],
-    [
-      3.5008482933044434,
-      3.419638156890869,
-      3.428748846054077
-    ],
-    [
-      0.19391772150993347,
-      -0.0928373709321022,
-      -0.25662538409233093
-    ]
-  ],
-  "source_sha256": "1785e292620ab4eb2f5cc59d9f94ae934c8da06bf6719082e98d6b750dd5f312"
+  "knn_validation": {
+    "user_knn/cosine/weighted_mean": {
+      "recall@10": 0.00033140016570008286,
+      "ndcg@10": 0.00012659650230434572,
+      "mean_popularity@10": 195.74207125103564
+    },
+    "user_knn/adjusted_cosine/weighted_mean": {
+      "recall@10": 0.0009942004971002485,
+      "ndcg@10": 0.00039610862606638027,
+      "mean_popularity@10": 149.04813587406792
+    },
+    "item_knn/cosine/weighted_mean": {
+      "recall@10": 0.00231980115990058,
+      "ndcg@10": 0.0011306539193572938,
+      "mean_popularity@10": 202.57231151615576
+    },
+    "item_knn/adjusted_cosine/weighted_mean": {
+      "recall@10": 0.0028169014084507044,
+      "ndcg@10": 0.0014492305215838975,
+      "mean_popularity@10": 244.18525269262634
+    },
+    "user_knn/cosine/weighted_sum": {
+      "recall@10": 0.1111847555923778,
+      "ndcg@10": 0.057220536527181766,
+      "mean_popularity@10": 1371.6942833471417
+    },
+    "user_knn/adjusted_cosine/weighted_sum": {
+      "recall@10": 0.09726594863297432,
+      "ndcg@10": 0.04892797860679226,
+      "mean_popularity@10": 1591.3591714995857
+    },
+    "item_knn/cosine/weighted_sum": {
+      "recall@10": 0.10720795360397681,
+      "ndcg@10": 0.05200333582612924,
+      "mean_popularity@10": 1070.9179784589892
+    },
+    "item_knn/adjusted_cosine/weighted_sum": {
+      "recall@10": 0.0820215410107705,
+      "ndcg@10": 0.04229076297456179,
+      "mean_popularity@10": 1461.0414747307373
+    }
+  },
+  "mean_popularity_at_10": {
+    "Popularity": 2065.717050538525,
+    "User KNN": 1373.5861806130904,
+    "Item KNN": 1073.5104391052196,
+    "MF": 1991.9511792322564,
+    "BPR": 1215.99790665562
+  },
+  "results_sha256": "df4c6bdf4d200b4a8665e4cfa2aa90d9b2f902ca819b70cd76cebed429d5f822"
 }
