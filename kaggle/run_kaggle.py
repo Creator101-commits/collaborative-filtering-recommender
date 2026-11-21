@@ -95,7 +95,11 @@ def _validation_configurations() -> dict[str, list[dict[str, Any]]]:
 
 def _run_validation(
     processed_dir: Path, tracking_dir: Path, artifact_dir: Path
-) -> tuple[dict[str, dict[str, object]], list[dict[str, object]]]:
+) -> tuple[
+    dict[str, dict[str, object]],
+    dict[str, dict[str, object]],
+    list[dict[str, object]],
+]:
     from recommender.experiments import (
         ExperimentConfig,
         run_bpr_baseline,
@@ -158,6 +162,7 @@ def _run_validation(
                 "train_seconds": result.train_seconds,
                 "inference_seconds": result.inference_seconds,
                 "wall_seconds": time.perf_counter() - started,
+                "validation_best_epoch": result.best_epoch,
                 **result.metrics,
             }
             rows.append(row)
@@ -168,22 +173,34 @@ def _run_validation(
                 flush=True,
             )
 
-    from recommender.experiments.protocol import select_configuration
+    from recommender.experiments.protocol import (
+        MODEL_HYPERPARAMETER_KEYS,
+        build_model_configuration,
+        select_configuration,
+    )
 
     selected: dict[str, dict[str, object]] = {}
-    metric_keys = {
-        "train_seconds",
-        "inference_seconds",
-        "wall_seconds",
-        "config",
-        "model",
-    }
+    selected_metrics: dict[str, dict[str, object]] = {}
     for model_name, candidates in per_model_rows.items():
         winner = select_configuration(candidates)
-        selected[model_name] = {
-            key: value for key, value in winner.items() if key not in metric_keys
+        best_epoch = winner.get("validation_best_epoch")
+        selected[model_name] = build_model_configuration(
+            model_name,
+            winner,
+            best_epoch=best_epoch if isinstance(best_epoch, int) else None,
+        )
+        config_keys = set(MODEL_HYPERPARAMETER_KEYS[model_name]) | {
+            "model",
+            "config",
+            "train_seconds",
+            "inference_seconds",
+            "wall_seconds",
+            "validation_best_epoch",
         }
-    return selected, rows
+        selected_metrics[model_name] = {
+            key: value for key, value in winner.items() if key not in config_keys
+        }
+    return selected, selected_metrics, rows
 
 
 def main() -> None:
@@ -208,7 +225,9 @@ def main() -> None:
 
     tracking_dir = BENCH / "mlruns-validation"
     artifact_dir = BENCH / "artifacts-validation"
-    selected, validation_rows = _run_validation(processed_dir, tracking_dir, artifact_dir)
+    selected, selected_metrics, validation_rows = _run_validation(
+        processed_dir, tracking_dir, artifact_dir
+    )
 
     validation_csv = BENCH / "validation-results.csv"
     if validation_rows:
@@ -219,12 +238,12 @@ def main() -> None:
 
     audit = audit_comparison_inputs(processed_dir, selected)
     card_path = BENCH / "experiment-card.json"
-    card_write_started = time.time()
     write_experiment_card(
         card_path,
         audit.data_manifest_sha256,
         selected,
         git_revision=sha,
+        selected_metrics=selected_metrics,
     )
     card_write_finished = time.time()
     card_sha = _sha256(card_path)

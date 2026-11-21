@@ -31,6 +31,7 @@ from recommender.evaluation import (
 )
 from recommender.experiments.protocol import (
     FINAL_MODEL_NAMES,
+    MODEL_HYPERPARAMETER_KEYS,
     PROTOCOL_VERSION,
     ComparisonProtocol,
     ProtocolError,
@@ -86,6 +87,10 @@ def _catalog_size(rows: list[dict[str, Any]], field: str, label: str) -> int:
 def _make_model(
     name: str, user_count: int, item_count: int, config: Mapping[str, object]
 ) -> RecommenderProtocol:
+    unknown = set(config) - MODEL_HYPERPARAMETER_KEYS[name]
+    if unknown:
+        raise ProtocolError(f"{name} configuration has unknown keys: {sorted(unknown)}")
+
     def integer(key: str, default: int) -> int:
         value = config.get(key, default)
         if not isinstance(value, int) or isinstance(value, bool):

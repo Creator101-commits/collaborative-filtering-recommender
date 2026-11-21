@@ -80,7 +80,11 @@ def test_audit_requires_all_models_and_test_table_for_split_invariants(
 def test_experiment_card_is_deterministic_and_not_silently_overwritten(tmp_path: Path) -> None:
     path = tmp_path / "experiment-card.json"
     configurations: dict[str, dict[str, object]] = {
-        name: {"selected_by": "validation"} for name in FINAL_MODEL_NAMES
+        "popularity": {},
+        "user_knn": {"similarity": "cosine"},
+        "item_knn": {"similarity": "cosine"},
+        "matrix_factorization": {"latent_dim": 32, "epochs": 7},
+        "bpr": {"latent_dim": 32, "epochs": 9},
     }
 
     written = write_experiment_card(path, "a" * 64, configurations, git_revision="abc")
@@ -176,3 +180,66 @@ def test_select_configuration_rejects_empty_and_missing_metrics() -> None:
         select_configuration([])
     with pytest.raises(ProtocolError, match="selection metrics"):
         select_configuration([{"name": "a"}])
+
+
+def test_build_model_configuration_freezes_checkpoint_epoch() -> None:
+    from recommender.experiments.protocol import build_model_configuration
+
+    row = {
+        "latent_dim": 32,
+        "learning_rate": 0.01,
+        "regularization": 0.001,
+        "ndcg@10": 0.5,
+        "recall@10": 0.7,
+        "train_seconds": 3.0,
+        "model": "matrix_factorization",
+    }
+    config = build_model_configuration("matrix_factorization", row, best_epoch=7)
+    assert config == {
+        "latent_dim": 32,
+        "learning_rate": 0.01,
+        "regularization": 0.001,
+        "epochs": 7,
+    }
+    assert not any("@" in key for key in config)
+
+
+def test_build_model_configuration_requires_epoch_for_learned() -> None:
+    from recommender.experiments.protocol import build_model_configuration
+
+    with pytest.raises(ProtocolError, match="checkpoint epoch"):
+        build_model_configuration("bpr", {"latent_dim": 16}, best_epoch=None)
+
+
+def test_build_model_configuration_omits_epochs_for_baselines() -> None:
+    from recommender.experiments.protocol import build_model_configuration
+
+    config = build_model_configuration(
+        "user_knn",
+        {
+            "n_neighbors": 40,
+            "similarity": "cosine",
+            "shrinkage": 10.0,
+            "min_support": 1,
+            "ndcg@10": 0.4,
+        },
+        best_epoch=None,
+    )
+    assert config == {
+        "n_neighbors": 40,
+        "similarity": "cosine",
+        "shrinkage": 10.0,
+        "min_support": 1,
+    }
+
+
+def test_experiment_card_rejects_unknown_config_keys(tmp_path: Path) -> None:
+    path = tmp_path / "card.json"
+    configurations: dict[str, dict[str, object]] = {
+        name: {} for name in FINAL_MODEL_NAMES
+    }
+    configurations["bpr"] = {"latent_dim": 16, "ndcg@10": 0.9}
+    with pytest.raises(ProtocolError, match="unknown keys"):
+        write_experiment_card(
+            path, "0" * 64, configurations, git_revision="abc123"
+        )

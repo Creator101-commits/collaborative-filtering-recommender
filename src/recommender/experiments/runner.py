@@ -86,6 +86,7 @@ class ExperimentResult:
     git_revision: str
     train_seconds: float
     inference_seconds: float
+    best_epoch: int | None = None
 
 
 def _sha256(path: Path) -> str:
@@ -229,6 +230,9 @@ def _run_validation_model(
     else:
         model.fit(train_rows, seed=config.seed)
     train_seconds = time.perf_counter() - train_started
+    best_epoch = getattr(model, "best_epoch", None)
+    if best_epoch is not None and not isinstance(best_epoch, int):
+        raise ExperimentError(f"{model_name} best_epoch is not an integer")
 
     inference_started = time.perf_counter()
     recommendations = {
@@ -340,6 +344,7 @@ def _run_validation_model(
         git_revision=git_revision,
         train_seconds=train_seconds,
         inference_seconds=inference_seconds,
+        best_epoch=best_epoch,
     )
 
 

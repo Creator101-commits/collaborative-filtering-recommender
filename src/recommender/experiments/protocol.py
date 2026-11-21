@@ -22,6 +22,25 @@ FINAL_MODEL_NAMES = (
     "matrix_factorization",
     "bpr",
 )
+LEARNED_MODEL_NAMES = frozenset({"matrix_factorization", "bpr"})
+MODEL_HYPERPARAMETER_KEYS: dict[str, frozenset[str]] = {
+    "popularity": frozenset(),
+    "user_knn": frozenset({"n_neighbors", "similarity", "shrinkage", "min_support"}),
+    "item_knn": frozenset({"n_neighbors", "similarity", "shrinkage", "min_support"}),
+    "matrix_factorization": frozenset(
+        {"latent_dim", "learning_rate", "regularization", "epochs", "batch_size"}
+    ),
+    "bpr": frozenset(
+        {
+            "latent_dim",
+            "learning_rate",
+            "regularization",
+            "epochs",
+            "batch_size",
+            "negative_samples",
+        }
+    ),
+}
 _REQUIRED_INPUTS = (
     "manifest.json",
     "movies.parquet",
@@ -223,6 +242,24 @@ def _audit_train_for_test(
             )
 
 
+def _validate_model_configurations(
+    model_configurations: Mapping[str, Mapping[str, object]],
+) -> None:
+    if set(model_configurations) != set(FINAL_MODEL_NAMES):
+        raise ProtocolError("model configurations must contain every final model")
+    if any(
+        not isinstance(configuration, Mapping) for configuration in model_configurations.values()
+    ):
+        raise ProtocolError("model configurations must be mappings")
+    for name, configuration in model_configurations.items():
+        allowed = MODEL_HYPERPARAMETER_KEYS[name]
+        unknown = set(configuration) - allowed
+        if unknown:
+            raise ProtocolError(
+                f"{name} configuration has unknown keys: {sorted(unknown)}"
+            )
+
+
 def audit_comparison_inputs(
     processed_dir: Path,
     model_configurations: Mapping[str, Mapping[str, object]],
@@ -231,13 +268,7 @@ def audit_comparison_inputs(
 ) -> ProtocolAudit:
     """Audit model parity and validation inputs without reading test labels."""
     protocol = protocol or ComparisonProtocol()
-    if set(model_configurations) != set(FINAL_MODEL_NAMES):
-        raise ProtocolError("model configurations must contain every final model")
-    if any(
-        not isinstance(configuration, Mapping) for configuration in model_configurations.values()
-    ):
-        raise ProtocolError("model configurations must be mappings")
-
+    _validate_model_configurations(model_configurations)
     processed_dir = processed_dir.resolve()
     manifest_path = processed_dir / "manifest.json"
     manifest = _read_json(manifest_path)
@@ -292,6 +323,12 @@ def audit_comparison_inputs(
     )
 
 
+def _selection_float(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ProtocolError("validation candidate lacks selection metrics")
+    return float(value)
+
+
 def select_configuration(
     candidates: list[dict[str, object]],
     *,
@@ -303,14 +340,43 @@ def select_configuration(
 
     def key(row: dict[str, object]) -> tuple[float, float, float]:
         try:
-            ndcg = float(row[f"ndcg@{primary_cutoff}"])
-            recall = float(row[f"recall@{primary_cutoff}"])
-            train_seconds = float(row["train_seconds"])
+            ndcg = _selection_float(row[f"ndcg@{primary_cutoff}"])
+            recall = _selection_float(row[f"recall@{primary_cutoff}"])
+            train_seconds = _selection_float(row["train_seconds"])
         except (KeyError, TypeError, ValueError) as error:
             raise ProtocolError("validation candidate lacks selection metrics") from error
         return (ndcg, recall, -train_seconds)
 
     return max(candidates, key=key)
+
+
+def build_model_configuration(
+    model_name: str,
+    validation_row: Mapping[str, object],
+    *,
+    best_epoch: int | None,
+) -> dict[str, object]:
+    """Freeze a selected validation row into a card-safe model configuration.
+
+    Only declared hyperparameter keys are copied; learned models additionally
+    carry the validation checkpoint epoch so the final refit reproduces the
+    early-stopped model rather than the maximum epoch count.
+    """
+    if model_name not in MODEL_HYPERPARAMETER_KEYS:
+        raise ProtocolError(f"unsupported model {model_name}")
+    hyper_keys = MODEL_HYPERPARAMETER_KEYS[model_name] - {"epochs"}
+    config = {
+        key: validation_row[key]
+        for key in sorted(hyper_keys)
+        if key in validation_row
+    }
+    if model_name in LEARNED_MODEL_NAMES:
+        if best_epoch is None:
+            raise ProtocolError(
+                f"{model_name} has no validation checkpoint epoch to freeze"
+            )
+        config["epochs"] = best_epoch
+    return config
 
 
 def write_experiment_card(
@@ -320,6 +386,7 @@ def write_experiment_card(
     *,
     git_revision: str,
     protocol: ComparisonProtocol | None = None,
+    selected_metrics: Mapping[str, Mapping[str, object]] | None = None,
 ) -> Path:
     """Write an immutable JSON experiment card before test evaluation."""
     protocol = protocol or ComparisonProtocol()
@@ -329,8 +396,7 @@ def write_experiment_card(
         char not in "0123456789abcdef" for char in data_manifest_sha256
     ):
         raise ValueError("data_manifest_sha256 must be a lowercase SHA-256 digest")
-    if set(model_configurations) != set(FINAL_MODEL_NAMES):
-        raise ProtocolError("model configurations must contain every final model")
+    _validate_model_configurations(model_configurations)
     card = {
         "card_version": 1,
         "git_revision": git_revision,
@@ -338,6 +404,10 @@ def write_experiment_card(
         "models": {name: dict(model_configurations[name]) for name in FINAL_MODEL_NAMES},
         "protocol": protocol.as_dict(),
     }
+    if selected_metrics is not None:
+        card["selected_validation_metrics"] = {
+            name: dict(selected_metrics.get(name, {})) for name in FINAL_MODEL_NAMES
+        }
     encoded = json.dumps(card, indent=2, sort_keys=True) + "\n"
     if path.exists():
         try:
