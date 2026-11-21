@@ -4,6 +4,8 @@ Status: frozen before final test evaluation.
 
 Revision note: protocol_version phase-8-v2 replaces phase-8-v1. The final test comparison now fits on train_for_test.parquet, which contains every source interaction strictly earlier than each user's test interaction, instead of train.parquet, which stopped at validation. This correction was made before any test data was read for model selection or evaluation.
 
+Revision note: protocol_version phase-8-v3 replaces phase-8-v2. Unlike the phase-8-v1 to phase-8-v2 correction, phase-8-v2 was run once to completion, including the frozen test read (Kaggle, git df2c8f7); the KNN scoring defect was noticed while reviewing that run. The correction is justified by validation-only evidence: on that run, user-KNN and item-KNN validation recall@10 was between 0.0003 and 0.003, versus 0.053 for popularity and 0.078 for BPR, and their mean_popularity@10 was roughly 150 to 250 versus about 2000 for the other models. phase-8-v3 adds weighted_sum score aggregation as a validation-selected alternative and keeps weighted_mean as a candidate.
+
 This card is the Phase 8 comparison contract. The test split must not be read while selecting a model, configuration, seed, metric, slice, or analysis method.
 
 ## Data and candidate protocol
@@ -54,7 +56,7 @@ The novelty measure follows the self-information formulation used by Zhou et al.
 ## Compute budget
 
 - Popularity has one validation configuration.
-- Each KNN family compares cosine and adjusted cosine only, with `n_neighbors=40`, `shrinkage=10`, and `min_support=1`.
+- Each KNN family compares the two similarity settings (cosine, adjusted_cosine) crossed with the two score aggregations (weighted_mean, weighted_sum), with `n_neighbors=40`, `shrinkage=10`, and `min_support=1`. `weighted_mean` divides the similarity-weighted rating sum by the summed absolute similarity of contributing neighbors; `weighted_sum` keeps the unnormalized sum.
 - Each learned model may compare at most four validation configurations using seed 0 for selection; the selected configuration is then evaluated with seeds 0, 1, and 2.
 - Frozen validation grids (latent_dim, learning_rate, regularization; epochs=20, batch_size=1024):
   - matrix_factorization: (16, 0.01, 0.001), (32, 0.01, 0.001), (64, 0.01, 0.001), (32, 0.005, 0.01)
@@ -63,4 +65,4 @@ The novelty measure follows the self-information formulation used by Zhou et al.
 
 ## Reproduction fields
 
-Every run and model artifact records `protocol_version=phase-8-v2`, model name, configuration, seed, data-manifest SHA-256, Git revision, split, cutoff, training time, inference time, metrics, and artifact paths. The pre-test audit verifies model-set parity, the frozen split policy, the train_for_test containment and ordering invariants, and a single shared validation candidate catalog derived from training rows only.
+Every run and model artifact records `protocol_version=phase-8-v3`, model name, configuration, seed, data-manifest SHA-256, Git revision, split, cutoff, training time, inference time, metrics, and artifact paths. The pre-test audit verifies model-set parity, the frozen split policy, the train_for_test containment and ordering invariants, and a single shared validation candidate catalog derived from training rows only.

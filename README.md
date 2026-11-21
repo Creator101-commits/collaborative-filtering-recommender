@@ -70,7 +70,7 @@ MovieLens 1M is provided by GroupLens for research use under conditions that req
 
 The `evaluate` command fits a selected model using only `train.parquet`, ranks the complete eligible catalog, evaluates against `validation.parquet`, writes a CSV result table and model artifact under `artifacts/`, and logs the run to local MLflow under `mlruns/`. It never reads `test.parquet`; test evaluation remains reserved for the frozen final protocol.
 
-Use `--model popularity`, `--model user_knn`, `--model item_knn`, `--model matrix_factorization`, or `--model bpr`. KNN supports the primary `cosine` setting and the single `adjusted_cosine` validation alternative, with `--n-neighbors`, `--shrinkage`, and `--min-support` controlling the bounded configuration.
+Use `--model popularity`, `--model user_knn`, `--model item_knn`, `--model matrix_factorization`, or `--model bpr`. KNN compares the `cosine` and `adjusted_cosine` similarity settings against `weighted_mean` (default) and `weighted_sum` score aggregation via `--aggregation`, with `--n-neighbors`, `--shrinkage`, and `--min-support` controlling the bounded configuration.
 
 Matrix factorization uses seeded mini-batch squared-error training and validation-loss checkpoint selection. BPR uses seeded negative sampling, pairwise ranking loss, and validation-loss checkpoint selection. Configure either learned model with `--latent-dim`, `--learning-rate`, `--regularization`, `--epochs`, and `--batch-size`; BPR also accepts `--negative-samples`.
 
