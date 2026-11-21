@@ -13,6 +13,7 @@ import pytest
 from recommender.data.download import DatasetSource, acquire_dataset
 from recommender.data.prepare import prepare_dataset
 from recommender.experiments import (
+    PROTOCOL_VERSION,
     ExperimentConfig,
     run_bpr_baseline,
     run_matrix_factorization_baseline,
@@ -74,7 +75,7 @@ def test_runner_logs_validation_run_and_artifacts(tmp_path: Path) -> None:
         row = next(csv.DictReader(source))
     assert row["split"] == "validation"
     assert row["cutoff"] == "2"
-    assert row["protocol_version"] == "phase-8-v1"
+    assert row["protocol_version"] == PROTOCOL_VERSION
     assert row["positive_rating_threshold"] == "4"
     assert "test" not in row
 

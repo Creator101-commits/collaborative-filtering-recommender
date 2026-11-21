@@ -26,7 +26,7 @@ from recommender.data.source import (
 )
 
 DEFAULT_PROCESSED_DIR = Path("data/processed/movielens-1m")
-PREPARATION_VERSION = 1
+PREPARATION_VERSION = 2
 DEFAULT_POSITIVE_RATING_THRESHOLD = 4
 DEFAULT_MINIMUM_POSITIVE_HISTORY = 3
 PROCESSED_FILES = (
@@ -34,6 +34,7 @@ PROCESSED_FILES = (
     "movies.parquet",
     "users.parquet",
     "train.parquet",
+    "train_for_test.parquet",
     "validation.parquet",
     "test.parquet",
 )
@@ -250,6 +251,7 @@ def _split_ratings(
 
     partitions: dict[str, list[_IndexedRating]] = {
         "train": [],
+        "train_for_test": [],
         "validation": [],
         "test": [],
     }
@@ -273,6 +275,13 @@ def _split_ratings(
             )
             if rating.order_key < validation.order_key
         ]
+        train_for_test = [
+            rating
+            for rating in sorted(
+                ratings_by_user.get(user_idx, []), key=lambda rating: rating.order_key
+            )
+            if rating.order_key < test.order_key
+        ]
         if train[-1].order_key >= validation.order_key or validation.order_key >= test.order_key:
             raise DatasetError(f"chronological split ordering failed for user {user_id}")
 
@@ -284,6 +293,7 @@ def _split_ratings(
             raise DatasetError(f"held-out item is present in training for user {user_id}")
 
         partitions["train"].extend(train)
+        partitions["train_for_test"].extend(train_for_test)
         partitions["validation"].append(validation)
         partitions["test"].append(test)
         evaluated_users.append(
@@ -395,7 +405,7 @@ def _write_processed_tables(
         },
         _USER_SCHEMA,
     )
-    for split in ("train", "validation", "test"):
+    for split in ("train", "train_for_test", "validation", "test"):
         split_ratings = sorted(
             partitions[split], key=lambda rating: (rating.user_idx, rating.order_key)
         )
@@ -433,6 +443,7 @@ def _build_manifest(
             "unassigned_interactions": len(ratings)
             - sum(len(partitions[split]) for split in ("train", "validation", "test")),
             "test_interactions": len(partitions["test"]),
+            "train_for_test_interactions": len(partitions["train_for_test"]),
             "train_interactions": len(partitions["train"]),
             "users": len(users),
             "validation_interactions": len(partitions["validation"]),
@@ -451,11 +462,13 @@ def _build_manifest(
             },
             "positive_interactions_only": False,
             "training_events": "all source interactions earlier than validation",
+            "test_training_events": "all source interactions earlier than test",
         },
         "time_ranges": {
             "ratings": _time_range(ratings),
             "test": _time_range(partitions["test"]),
             "train": _time_range(partitions["train"]),
+            "train_for_test": _time_range(partitions["train_for_test"]),
             "validation": _time_range(partitions["validation"]),
         },
     }

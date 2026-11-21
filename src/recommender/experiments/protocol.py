@@ -14,7 +14,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from recommender.evaluation import generate_candidate_catalog
 
-PROTOCOL_VERSION = "phase-8-v1"
+PROTOCOL_VERSION = "phase-8-v2"
 FINAL_MODEL_NAMES = (
     "popularity",
     "user_knn",
@@ -27,7 +27,9 @@ _REQUIRED_INPUTS = (
     "movies.parquet",
     "users.parquet",
     "train.parquet",
+    "train_for_test.parquet",
     "validation.parquet",
+    "test.parquet",
 )
 
 
@@ -112,7 +114,10 @@ class ComparisonProtocol:
             },
             "novelty": self.novelty,
             "primary_cutoff": self.primary_cutoff,
-            "selection": "one configuration per model selected using validation only",
+            "selection": (
+                "one configuration per model selected by validation NDCG@10, "
+                "ties broken by Recall@10 then lower train seconds"
+            ),
             "slices": [
                 "history_length",
                 "item_popularity",
@@ -172,6 +177,52 @@ def _catalog_size(rows: list[dict[str, Any]], field: str, label: str) -> int:
     return len(values)
 
 
+def _audit_train_for_test(
+    train_rows: list[dict[str, Any]],
+    train_for_test_rows: list[dict[str, Any]],
+    validation_rows: list[dict[str, Any]],
+    test_rows: list[dict[str, Any]],
+) -> None:
+    """Verify leave-one-out test training contains every pre-test interaction."""
+
+    def interaction_key(row: Mapping[str, Any]) -> tuple[int, int, int]:
+        try:
+            return (
+                int(row["user_idx"]),
+                int(row["timestamp"]),
+                int(row["interaction_idx"]),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ProtocolError("split table has invalid ordering fields") from error
+
+    train_keys = {interaction_key(row) for row in train_rows}
+    test_for_test_keys = {interaction_key(row) for row in train_for_test_rows}
+    if not train_keys <= test_for_test_keys:
+        raise ProtocolError("train_for_test does not contain every training interaction")
+
+    validation_keys = {interaction_key(row) for row in validation_rows}
+    if not validation_keys <= test_for_test_keys:
+        raise ProtocolError("train_for_test does not contain the validation interaction")
+
+    test_keys = {interaction_key(row) for row in test_rows}
+    if test_keys & test_for_test_keys:
+        raise ProtocolError("train_for_test contains a test interaction")
+
+    test_timestamp = {
+        int(row["user_idx"]): int(row["timestamp"]) for row in test_rows
+    }
+    latest_train_for_test: dict[int, int] = {}
+    for row in train_for_test_rows:
+        user = int(row["user_idx"])
+        timestamp = int(row["timestamp"])
+        latest_train_for_test[user] = max(latest_train_for_test.get(user, 0), timestamp)
+    for user, timestamp in latest_train_for_test.items():
+        if user in test_timestamp and timestamp > test_timestamp[user]:
+            raise ProtocolError(
+                "train_for_test contains an interaction later than the test interaction"
+            )
+
+
 def audit_comparison_inputs(
     processed_dir: Path,
     model_configurations: Mapping[str, Mapping[str, object]],
@@ -208,14 +259,20 @@ def audit_comparison_inputs(
         raise ProtocolError("processed manifest has an incompatible candidate policy")
     if split_protocol.get("training_events") != "all source interactions earlier than validation":
         raise ProtocolError("processed manifest has an incompatible training policy")
+    if split_protocol.get("test_training_events") != "all source interactions earlier than test":
+        raise ProtocolError("processed manifest has an incompatible test-training policy")
     for name in _REQUIRED_INPUTS:
         if not (processed_dir / name).is_file():
             raise ProtocolError(f"processed inputs are missing {name}")
 
+    train_rows = _read_rows(processed_dir / "train.parquet")
+    train_for_test_rows = _read_rows(processed_dir / "train_for_test.parquet")
+    validation_rows = _read_rows(processed_dir / "validation.parquet")
+    test_rows = _read_rows(processed_dir / "test.parquet")
+    _audit_train_for_test(train_rows, train_for_test_rows, validation_rows, test_rows)
+
     item_count = _catalog_size(_read_rows(processed_dir / "movies.parquet"), "item_idx", "movies")
     user_count = _catalog_size(_read_rows(processed_dir / "users.parquet"), "user_idx", "users")
-    train_rows = _read_rows(processed_dir / "train.parquet")
-    validation_rows = _read_rows(processed_dir / "validation.parquet")
     try:
         evaluated_users = sorted({int(row["user_idx"]) for row in validation_rows})
     except (KeyError, TypeError, ValueError) as error:
@@ -233,6 +290,27 @@ def audit_comparison_inputs(
         evaluated_users=len(evaluated_users),
         candidate_catalog_sha256=hashlib.sha256(candidate_bytes).hexdigest(),
     )
+
+
+def select_configuration(
+    candidates: list[dict[str, object]],
+    *,
+    primary_cutoff: int = 10,
+) -> dict[str, object]:
+    """Pick the validation winner: NDCG@K desc, Recall@K desc, train seconds asc."""
+    if not candidates:
+        raise ProtocolError("no validation candidates to select from")
+
+    def key(row: dict[str, object]) -> tuple[float, float, float]:
+        try:
+            ndcg = float(row[f"ndcg@{primary_cutoff}"])
+            recall = float(row[f"recall@{primary_cutoff}"])
+            train_seconds = float(row["train_seconds"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ProtocolError("validation candidate lacks selection metrics") from error
+        return (ndcg, recall, -train_seconds)
+
+    return max(candidates, key=key)
 
 
 def write_experiment_card(

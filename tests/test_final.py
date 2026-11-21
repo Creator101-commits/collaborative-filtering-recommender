@@ -9,6 +9,7 @@ from recommender.data.download import DatasetSource, acquire_dataset
 from recommender.data.prepare import prepare_dataset
 from recommender.experiments import (
     FINAL_MODEL_NAMES,
+    PROTOCOL_VERSION,
     ComparisonProtocol,
     run_final_comparison,
     write_experiment_card,
@@ -73,4 +74,4 @@ def test_final_comparison_writes_test_metrics_and_paired_analysis(tmp_path: Path
         rows = list(csv.DictReader(source))
     assert len(rows) == 9
     assert {row["split"] for row in rows} == {"test"}
-    assert all(row["protocol_version"] == "phase-8-v1" for row in rows)
+    assert all(row["protocol_version"] == PROTOCOL_VERSION for row in rows)

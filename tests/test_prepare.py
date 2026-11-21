@@ -104,6 +104,7 @@ def test_indices_and_splits_are_stable(tmp_path: Path) -> None:
         "ratings": 11,
         "unassigned_interactions": 3,
         "test_interactions": 2,
+        "train_for_test_interactions": 6,
         "train_interactions": 4,
         "users": 3,
         "validation_interactions": 2,
@@ -112,6 +113,7 @@ def test_indices_and_splits_are_stable(tmp_path: Path) -> None:
         "ratings": {"max_timestamp": 400, "min_timestamp": 100},
         "test": {"max_timestamp": 400, "min_timestamp": 200},
         "train": {"max_timestamp": 200, "min_timestamp": 100},
+        "train_for_test": {"max_timestamp": 300, "min_timestamp": 100},
         "validation": {"max_timestamp": 300, "min_timestamp": 100},
     }
 
@@ -119,11 +121,19 @@ def test_indices_and_splits_are_stable(tmp_path: Path) -> None:
 def test_split_invariants_and_candidate_counts(tmp_path: Path) -> None:
     _, processed_dir = _prepared(tmp_path)
     train = _rows(processed_dir / "train.parquet")
+    train_for_test = _rows(processed_dir / "train_for_test.parquet")
     validation = _rows(processed_dir / "validation.parquet")
     test = _rows(processed_dir / "test.parquet")
     train_pairs = {(row["user_id"], row["movie_id"]) for row in train}
+    train_for_test_pairs = {
+        (row["user_id"], row["movie_id"]) for row in train_for_test
+    }
     validation_pairs = {(row["user_id"], row["movie_id"]) for row in validation}
     test_pairs = {(row["user_id"], row["movie_id"]) for row in test}
+
+    assert train_pairs <= train_for_test_pairs
+    assert validation_pairs <= train_for_test_pairs
+    assert train_for_test_pairs.isdisjoint(test_pairs)
 
     assert train_pairs.isdisjoint(validation_pairs)
     assert train_pairs.isdisjoint(test_pairs)
@@ -144,6 +154,15 @@ def test_split_invariants_and_candidate_counts(tmp_path: Path) -> None:
         assert order(user_train[-1]) < order(user_validation) < order(user_test)
         assert user_validation["item_idx"] not in {row["item_idx"] for row in user_train}
         assert user_test["item_idx"] not in {row["item_idx"] for row in user_train}
+
+        user_train_for_test = [
+            row for row in train_for_test if row["user_id"] == user_id
+        ]
+        assert order(user_train_for_test[-1]) < order(user_test)
+        assert any(
+            row["interaction_idx"] == user_validation["interaction_idx"]
+            for row in user_train_for_test
+        )
 
     manifest = json.loads((processed_dir / "manifest.json").read_text(encoding="utf-8"))
     assert {row["user_id"]: row["candidate_items"] for row in manifest["evaluated_users"]} == {

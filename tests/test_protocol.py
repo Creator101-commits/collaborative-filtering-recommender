@@ -58,10 +58,10 @@ def test_protocol_rejects_invalid_settings() -> None:
         ComparisonProtocol(confidence_level=1.0)
 
 
-def test_audit_requires_all_models_and_does_not_read_test_labels(tmp_path: Path) -> None:
+def test_audit_requires_all_models_and_test_table_for_split_invariants(
+    tmp_path: Path,
+) -> None:
     processed_dir = _prepared(tmp_path)
-    (processed_dir / "test.parquet").unlink()
-
     configurations: dict[str, dict[str, object]] = {name: {} for name in FINAL_MODEL_NAMES}
     audit = audit_comparison_inputs(processed_dir, configurations)
 
@@ -71,6 +71,10 @@ def test_audit_requires_all_models_and_does_not_read_test_labels(tmp_path: Path)
 
     with pytest.raises(ProtocolError, match="model configurations"):
         audit_comparison_inputs(processed_dir, {"popularity": {}})
+
+    (processed_dir / "test.parquet").unlink()
+    with pytest.raises(ProtocolError, match="test.parquet"):
+        audit_comparison_inputs(processed_dir, configurations)
 
 
 def test_experiment_card_is_deterministic_and_not_silently_overwritten(tmp_path: Path) -> None:
@@ -88,3 +92,87 @@ def test_experiment_card_is_deterministic_and_not_silently_overwritten(tmp_path:
     assert write_experiment_card(path, "a" * 64, configurations, git_revision="abc") == path
     with pytest.raises(ProtocolError, match="already exists"):
         write_experiment_card(path, "b" * 64, configurations, git_revision="abc")
+
+
+def _interaction(user: int, timestamp: int, index: int) -> dict[str, object]:
+    return {"user_idx": user, "timestamp": timestamp, "interaction_idx": index}
+
+
+def test_train_for_test_audit_accepts_leave_one_out_history() -> None:
+    from recommender.experiments.protocol import _audit_train_for_test
+
+    train = [_interaction(0, 1, 0)]
+    train_for_test = [_interaction(0, 1, 0), _interaction(0, 2, 1), _interaction(0, 3, 2)]
+    validation = [_interaction(0, 2, 1)]
+    test = [_interaction(0, 4, 3)]
+
+    _audit_train_for_test(train, train_for_test, validation, test)
+
+
+def test_train_for_test_audit_rejects_missing_training_row() -> None:
+    from recommender.experiments.protocol import _audit_train_for_test
+
+    with pytest.raises(ProtocolError, match="every training interaction"):
+        _audit_train_for_test(
+            [_interaction(0, 1, 0), _interaction(0, 2, 1)],
+            [_interaction(0, 1, 0)],
+            [_interaction(0, 3, 2)],
+            [_interaction(0, 4, 3)],
+        )
+
+
+def test_train_for_test_audit_rejects_missing_validation_row() -> None:
+    from recommender.experiments.protocol import _audit_train_for_test
+
+    with pytest.raises(ProtocolError, match="validation interaction"):
+        _audit_train_for_test(
+            [_interaction(0, 1, 0)],
+            [_interaction(0, 1, 0), _interaction(0, 3, 2)],
+            [_interaction(0, 2, 1)],
+            [_interaction(0, 4, 3)],
+        )
+
+
+def test_train_for_test_audit_rejects_test_row() -> None:
+    from recommender.experiments.protocol import _audit_train_for_test
+
+    with pytest.raises(ProtocolError, match="test interaction"):
+        _audit_train_for_test(
+            [_interaction(0, 1, 0)],
+            [_interaction(0, 1, 0), _interaction(0, 2, 1), _interaction(0, 4, 3)],
+            [_interaction(0, 2, 1)],
+            [_interaction(0, 4, 3)],
+        )
+
+
+def test_train_for_test_audit_rejects_late_interaction() -> None:
+    from recommender.experiments.protocol import _audit_train_for_test
+
+    with pytest.raises(ProtocolError, match="later than the test interaction"):
+        _audit_train_for_test(
+            [_interaction(0, 1, 0)],
+            [_interaction(0, 1, 0), _interaction(0, 2, 1), _interaction(0, 9, 2)],
+            [_interaction(0, 2, 1)],
+            [_interaction(0, 4, 3)],
+        )
+
+
+def test_select_configuration_prefers_ndcg_then_recall_then_speed() -> None:
+    from recommender.experiments.protocol import select_configuration
+
+    candidates = [
+        {"ndcg@10": 0.5, "recall@10": 0.9, "train_seconds": 1.0, "name": "a"},
+        {"ndcg@10": 0.6, "recall@10": 0.1, "train_seconds": 9.0, "name": "b"},
+        {"ndcg@10": 0.6, "recall@10": 0.2, "train_seconds": 9.0, "name": "c"},
+        {"ndcg@10": 0.6, "recall@10": 0.2, "train_seconds": 3.0, "name": "d"},
+    ]
+    assert select_configuration(candidates)["name"] == "d"
+
+
+def test_select_configuration_rejects_empty_and_missing_metrics() -> None:
+    from recommender.experiments.protocol import select_configuration
+
+    with pytest.raises(ProtocolError, match="no validation candidates"):
+        select_configuration([])
+    with pytest.raises(ProtocolError, match="selection metrics"):
+        select_configuration([{"name": "a"}])

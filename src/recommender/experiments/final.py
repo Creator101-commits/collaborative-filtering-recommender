@@ -208,7 +208,7 @@ def run_final_comparison(
     if card["data_manifest_sha256"] != manifest_hash:
         raise ProtocolError("experiment card does not match the processed manifest")
 
-    train_rows = _read_rows(processed_dir / "train.parquet")
+    train_rows = _read_rows(processed_dir / "train_for_test.parquet")
     test_rows = _read_rows(processed_dir / "test.parquet")
     item_count = _catalog_size(_read_rows(processed_dir / "movies.parquet"), "item_idx", "movies")
     user_count = _catalog_size(_read_rows(processed_dir / "users.parquet"), "user_idx", "users")
