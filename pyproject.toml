@@ -3,7 +3,7 @@ name = "collaborative-filtering-recommender"
 version = "0.1.0"
 description = "A reproducible MovieLens 1M collaborative-filtering benchmark"
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "mlflow>=3.15.2",
     "pyarrow>=23.0.0",

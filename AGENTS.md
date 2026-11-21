@@ -14,7 +14,7 @@ uv run mypy src
 
 ## Platform support
 
-- macOS and Linux; Python 3.12.
+- macOS and Linux; Python 3.12-3.13. Kaggle runs 3.13.
 - CPU development is the default; PyTorch training may benefit from CUDA.
 
 ## Key conventions
