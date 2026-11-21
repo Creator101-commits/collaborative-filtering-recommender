@@ -1,6 +1,6 @@
 # MovieLens 1M experiment card
 
-Status: frozen before final test evaluation.
+Status: frozen before final test evaluation; the phase-8-v3 comparison ran on Kaggle from git 045f514 and its curated outputs are in `results/`.
 
 Revision note: protocol_version phase-8-v2 replaces phase-8-v1. The final test comparison now fits on train_for_test.parquet, which contains every source interaction strictly earlier than each user's test interaction, instead of train.parquet, which stopped at validation. This correction was made before any test data was read for model selection or evaluation.
 

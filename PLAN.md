@@ -409,7 +409,7 @@ Complete the phases in order. Do not start a phase until the previous phase's ex
 - Final test results are never used to retune or reselect a model.
 
 ### Phase 10: Reproducible report and v1 release
-**Status:** In progress.
+**Status:** Complete (report generated and verified on Kaggle; the v1 tag is a release decision, not yet cut).
 
 **Depends on:** Phase 9.
 

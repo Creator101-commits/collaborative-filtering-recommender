@@ -13,9 +13,9 @@ Fixed item-KNN seen-item filtering, safer tensor artifact loading, duplicate ran
 
 ## Limits
 
-The README figure is a synthetic four-user demonstration. Full MovieLens runs require acquired data and a frozen card; test-leading paired intervals are exploratory.
+The frozen test read happened once per protocol version. phase-8-v2 completed a test read before the KNN aggregation defect was found (git df2c8f7); that read was not used for selection and the v3 correction rests on validation-only evidence. Test-leading paired intervals are exploratory and unadjusted for selection. KNN and popularity evaluate a single seed; MF and BPR use three declared seeds.
 
-Kaggle API access failed because the execution environment could not resolve its hostname. The private notebook was also unavailable through the browser. No GPU training or full-scale external benchmark result is claimed by this review. New CI workflows are configuration changes; their hosted execution must be checked after publication.
+The phase-8-v3 Kaggle run completed from git 045f514 (`protocol_version=phase-8-v3`, ordering guard verified). Its curated outputs are in `results/`; `report.md` there is the run's own report. New CI workflows are configuration changes; their hosted execution must be checked after publication.
 
 ## Protocol v2 correction
 
