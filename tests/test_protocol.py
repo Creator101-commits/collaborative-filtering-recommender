@@ -243,3 +243,18 @@ def test_experiment_card_rejects_unknown_config_keys(tmp_path: Path) -> None:
         write_experiment_card(
             path, "0" * 64, configurations, git_revision="abc123"
         )
+
+
+def test_model_configurations_accept_knn_aggregation(tmp_path: Path) -> None:
+    path = tmp_path / "card.json"
+    configurations: dict[str, dict[str, object]] = {
+        name: {} for name in FINAL_MODEL_NAMES
+    }
+    configurations["user_knn"] = {"aggregation": "weighted_sum"}
+    configurations["item_knn"] = {"aggregation": "weighted_sum"}
+
+    write_experiment_card(path, "a" * 64, configurations, git_revision="abc")
+
+    card = json.loads(path.read_text(encoding="utf-8"))
+    assert card["models"]["user_knn"]["aggregation"] == "weighted_sum"
+    assert card["models"]["item_knn"]["aggregation"] == "weighted_sum"

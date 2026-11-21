@@ -14,7 +14,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from recommender.evaluation import generate_candidate_catalog
 
-PROTOCOL_VERSION = "phase-8-v2"
+PROTOCOL_VERSION = "phase-8-v3"
 FINAL_MODEL_NAMES = (
     "popularity",
     "user_knn",
@@ -25,8 +25,12 @@ FINAL_MODEL_NAMES = (
 LEARNED_MODEL_NAMES = frozenset({"matrix_factorization", "bpr"})
 MODEL_HYPERPARAMETER_KEYS: dict[str, frozenset[str]] = {
     "popularity": frozenset(),
-    "user_knn": frozenset({"n_neighbors", "similarity", "shrinkage", "min_support"}),
-    "item_knn": frozenset({"n_neighbors", "similarity", "shrinkage", "min_support"}),
+    "user_knn": frozenset(
+        {"n_neighbors", "similarity", "shrinkage", "min_support", "aggregation"}
+    ),
+    "item_knn": frozenset(
+        {"n_neighbors", "similarity", "shrinkage", "min_support", "aggregation"}
+    ),
     "matrix_factorization": frozenset(
         {"latent_dim", "learning_rate", "regularization", "epochs", "batch_size"}
     ),
@@ -108,7 +112,7 @@ class ComparisonProtocol:
             },
             "cutoffs": list(self.metric_cutoffs),
             "compute_budget": {
-                "knn_validation_configurations_per_family": 2,
+                "knn_validation_configurations_per_family": 4,
                 "learned_validation_configurations_per_model": 4,
                 "popularity_validation_configurations": 1,
             },

@@ -37,12 +37,33 @@ BPR_GRID = [
     {"latent_dim": 32, "learning_rate": 0.01, "regularization": 0.001},
 ]
 KNN_GRID = [
-    {"n_neighbors": 40, "similarity": "cosine", "shrinkage": 10.0, "min_support": 1},
+    {
+        "n_neighbors": 40,
+        "similarity": "cosine",
+        "shrinkage": 10.0,
+        "min_support": 1,
+        "aggregation": "weighted_mean",
+    },
+    {
+        "n_neighbors": 40,
+        "similarity": "cosine",
+        "shrinkage": 10.0,
+        "min_support": 1,
+        "aggregation": "weighted_sum",
+    },
     {
         "n_neighbors": 40,
         "similarity": "adjusted_cosine",
         "shrinkage": 10.0,
         "min_support": 1,
+        "aggregation": "weighted_mean",
+    },
+    {
+        "n_neighbors": 40,
+        "similarity": "adjusted_cosine",
+        "shrinkage": 10.0,
+        "min_support": 1,
+        "aggregation": "weighted_sum",
     },
 ]
 
@@ -131,6 +152,7 @@ def _run_validation(
                     similarity=str(config["similarity"]),
                     shrinkage=float(config["shrinkage"]),
                     min_support=int(config["min_support"]),
+                    aggregation=str(config["aggregation"]),
                     tracking_dir=tracking_dir,
                     artifact_dir=artifact_dir,
                     config=experiment,
@@ -214,7 +236,10 @@ def main() -> None:
         run_final_comparison,
         write_experiment_card,
     )
-    from recommender.experiments.protocol import audit_comparison_inputs
+    from recommender.experiments.protocol import (
+        PROTOCOL_VERSION,
+        audit_comparison_inputs,
+    )
 
     raw_dir = WORK / "raw" / "ml-1m"
     processed_dir = WORK / "processed" / "movielens-1m"
@@ -297,7 +322,7 @@ def main() -> None:
             "slices": str(result.slices_path),
             "validation": str(validation_csv),
         },
-        "protocol_version": "phase-8-v2",
+        "protocol_version": PROTOCOL_VERSION,
         "selected_configurations": selected,
     }
     (BENCH / "manifest.json").write_text(
