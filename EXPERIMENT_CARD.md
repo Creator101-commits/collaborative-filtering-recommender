@@ -2,14 +2,17 @@
 
 Status: frozen before final test evaluation.
 
+Revision note: protocol_version phase-8-v2 replaces phase-8-v1. The final test comparison now fits on train_for_test.parquet, which contains every source interaction strictly earlier than each user's test interaction, instead of train.parquet, which stopped at validation. This correction was made before any test data was read for model selection or evaluation.
+
 This card is the Phase 8 comparison contract. The test split must not be read while selecting a model, configuration, seed, metric, slice, or analysis method.
 
 ## Data and candidate protocol
 
 - Dataset: MovieLens 1M.
 - Relevance: a held-out rating is relevant when its rating is at least 4.
-- Training: all source interactions earlier than validation for each evaluated user.
-- Candidates: every indexed movie except that user's training items. Validation and test items remain eligible candidates.
+- Validation training: all source interactions earlier than validation for each evaluated user.
+- Test training (`train_for_test.parquet`): all source interactions earlier than that user's test interaction, including the validation interaction and any lower-rated rows between validation and test.
+- Candidates: every indexed movie except that user's fitted-split items. For validation the fitted split is train; for test it is train_for_test, so the validation item is no longer an eligible false negative. Demographics are not model features or default analysis slices.
 - Demographics are not model features or default analysis slices.
 - The processed-data manifest SHA-256 is recorded in the generated JSON card and every artifact.
 
@@ -23,7 +26,7 @@ The comparison contains exactly these model families:
 - biased matrix factorization
 - Bayesian Personalized Ranking
 
-One configuration per model is selected from validation results only. The selected configurations, data-manifest hash, protocol version, Git revision, and seed are written by `write_experiment_card` before test evaluation. A card with different contents cannot overwrite an existing card.
+One configuration per model is selected from validation results only: highest validation NDCG@10, ties broken by Recall@10 then lower train seconds (`select_configuration` enforces this order). The selected configurations, data-manifest hash, protocol version, Git revision, and seed are written by `write_experiment_card` before test evaluation. A card with different contents cannot overwrite an existing card.
 
 ## Metrics
 
@@ -52,9 +55,12 @@ The novelty measure follows the self-information formulation used by Zhou et al.
 
 - Popularity has one validation configuration.
 - Each KNN family compares cosine and adjusted cosine only, with `n_neighbors=40`, `shrinkage=10`, and `min_support=1`.
-- Each learned model may compare at most four validation configurations using one documented seed; the final selected configuration is then evaluated with seeds 0, 1, and 2.
+- Each learned model may compare at most four validation configurations using seed 0 for selection; the selected configuration is then evaluated with seeds 0, 1, and 2.
+- Frozen validation grids (latent_dim, learning_rate, regularization; epochs=20, batch_size=1024):
+  - matrix_factorization: (16, 0.01, 0.001), (32, 0.01, 0.001), (64, 0.01, 0.001), (32, 0.005, 0.01)
+  - bpr: (16, 0.05, 0.001), (32, 0.05, 0.001), (64, 0.05, 0.001), (32, 0.01, 0.001)
 - No hyperparameter search or re-selection is permitted after test results are viewed.
 
 ## Reproduction fields
 
-Every run and model artifact records `protocol_version=phase-8-v1`, model name, configuration, seed, data-manifest SHA-256, Git revision, split, cutoff, training time, inference time, metrics, and artifact paths. The pre-test audit verifies model-set parity, the frozen split policy, and a single shared validation candidate catalog derived from training rows only.
+Every run and model artifact records `protocol_version=phase-8-v2`, model name, configuration, seed, data-manifest SHA-256, Git revision, split, cutoff, training time, inference time, metrics, and artifact paths. The pre-test audit verifies model-set parity, the frozen split policy, the train_for_test containment and ordering invariants, and a single shared validation candidate catalog derived from training rows only.
