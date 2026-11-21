@@ -1,0 +1,58 @@
+{
+  "benchmark": "movielens-1m-frozen-protocol",
+  "card_sha256": "093b59f33d24e4dfdc15fc3c5ed4d692527e07ae7d8ed129dc1c897cb0277859",
+  "card_write_epoch": 1795297254.8313603,
+  "data_manifest_sha256": "a2673ff815218fc1f3e0954d5c061fa6caa6d3d0c72afbf41e3a120eead48a74",
+  "first_test_read_epoch": 1795297254.83148,
+  "git_sha": "045f514a9df574d236a230fd1f00053d351a777a",
+  "hardware": {
+    "cuda": true,
+    "gpu": "Tesla T4"
+  },
+  "leading_model": "user_knn",
+  "library_versions": {
+    "mlflow": "3.18.0",
+    "numpy": "2.1.3",
+    "pandas": "2.3.3",
+    "pyarrow": "23.0.1",
+    "scipy": "1.16.3",
+    "torch": "2.11.0+cu130"
+  },
+  "outputs": {
+    "paired_results": "/kaggle/working/benchmark/artifacts-final/paired-results.csv",
+    "report": "/kaggle/working/benchmark/report/report.md",
+    "results": "/kaggle/working/benchmark/artifacts-final/final-results.csv",
+    "slices": "/kaggle/working/benchmark/artifacts-final/final-slices.csv",
+    "validation": "/kaggle/working/benchmark/validation-results.csv"
+  },
+  "protocol_version": "phase-8-v3",
+  "selected_configurations": {
+    "bpr": {
+      "epochs": 3,
+      "latent_dim": 32,
+      "learning_rate": 0.01,
+      "regularization": 0.001
+    },
+    "item_knn": {
+      "aggregation": "weighted_sum",
+      "min_support": 1,
+      "n_neighbors": 40,
+      "shrinkage": 10.0,
+      "similarity": "cosine"
+    },
+    "matrix_factorization": {
+      "epochs": 18,
+      "latent_dim": 32,
+      "learning_rate": 0.005,
+      "regularization": 0.01
+    },
+    "popularity": {},
+    "user_knn": {
+      "aggregation": "weighted_sum",
+      "min_support": 1,
+      "n_neighbors": 40,
+      "shrinkage": 10.0,
+      "similarity": "cosine"
+    }
+  }
+}

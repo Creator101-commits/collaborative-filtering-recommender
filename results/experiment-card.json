@@ -1,0 +1,148 @@
+{
+  "card_version": 1,
+  "data_manifest_sha256": "a2673ff815218fc1f3e0954d5c061fa6caa6d3d0c72afbf41e3a120eead48a74",
+  "git_revision": "045f514a9df574d236a230fd1f00053d351a777a",
+  "models": {
+    "bpr": {
+      "epochs": 3,
+      "latent_dim": 32,
+      "learning_rate": 0.01,
+      "regularization": 0.001
+    },
+    "item_knn": {
+      "aggregation": "weighted_sum",
+      "min_support": 1,
+      "n_neighbors": 40,
+      "shrinkage": 10.0,
+      "similarity": "cosine"
+    },
+    "matrix_factorization": {
+      "epochs": 18,
+      "latent_dim": 32,
+      "learning_rate": 0.005,
+      "regularization": 0.01
+    },
+    "popularity": {},
+    "user_knn": {
+      "aggregation": "weighted_sum",
+      "min_support": 1,
+      "n_neighbors": 40,
+      "shrinkage": 10.0,
+      "similarity": "cosine"
+    }
+  },
+  "protocol": {
+    "bootstrap": {
+      "confidence_level": 0.95,
+      "interval": "percentile",
+      "level": "user",
+      "replicates": 10000
+    },
+    "compute_budget": {
+      "knn_validation_configurations_per_family": 4,
+      "learned_validation_configurations_per_model": 4,
+      "popularity_validation_configurations": 1
+    },
+    "cutoffs": [
+      5,
+      10,
+      20
+    ],
+    "history_slices": {
+      "boundaries": [
+        0.3333333333333333,
+        0.6666666666666666
+      ],
+      "definition": "training interaction-count quantiles"
+    },
+    "item_popularity_slices": {
+      "boundaries": [
+        0.2,
+        0.8
+      ],
+      "definition": "positive training interaction-count quantiles"
+    },
+    "learned_model_seeds": [
+      0,
+      1,
+      2
+    ],
+    "metrics": {
+      "beyond_accuracy": [
+        "catalog_coverage",
+        "mean_popularity",
+        "novelty",
+        "gini_exposure"
+      ],
+      "ranking": [
+        "recall",
+        "ndcg",
+        "mrr",
+        "hit_rate"
+      ],
+      "relevance": "binary rating-threshold holdouts"
+    },
+    "novelty": "laplace_smoothed_self_information_bits",
+    "primary_cutoff": 10,
+    "selection": "one configuration per model selected by validation NDCG@10, ties broken by Recall@10 then lower train seconds",
+    "slices": [
+      "history_length",
+      "item_popularity",
+      "cold_start_proxy",
+      "recommendation_concentration"
+    ],
+    "version": "phase-8-v3"
+  },
+  "selected_validation_metrics": {
+    "bpr": {
+      "catalog_coverage@10": 0.33273242338398146,
+      "gini_exposure@10": 0.9412683716179613,
+      "hit_rate@10": 0.07754763877381939,
+      "mean_popularity@10": 1253.730687655344,
+      "mrr@10": 0.02901980510514065,
+      "ndcg@10": 0.04022320848210877,
+      "novelty@10": 9.152276057773918,
+      "recall@10": 0.07754763877381939
+    },
+    "item_knn": {
+      "catalog_coverage@10": 0.32526397115632244,
+      "gini_exposure@10": 0.9213170745550091,
+      "hit_rate@10": 0.10720795360397681,
+      "mean_popularity@10": 1070.9179784589892,
+      "mrr@10": 0.03544272168961481,
+      "ndcg@10": 0.05200333582612924,
+      "novelty@10": 9.356859419202868,
+      "recall@10": 0.10720795360397681
+    },
+    "matrix_factorization": {
+      "catalog_coverage@10": 0.04609837754313675,
+      "gini_exposure@10": 0.9938003418551027,
+      "hit_rate@10": 0.048053024026512015,
+      "mean_popularity@10": 1979.1342336371167,
+      "mrr@10": 0.015639391906997542,
+      "ndcg@10": 0.023064326318066448,
+      "novelty@10": 8.202069693158684,
+      "recall@10": 0.048053024026512015
+    },
+    "popularity": {
+      "catalog_coverage@10": 0.04584084470770023,
+      "gini_exposure@10": 0.9935116063669286,
+      "hit_rate@10": 0.052526926263463135,
+      "mean_popularity@10": 2052.1591549295777,
+      "mrr@10": 0.017543167501742483,
+      "ndcg@10": 0.025513135748655925,
+      "novelty@10": 8.134364507147133,
+      "recall@10": 0.052526926263463135
+    },
+    "user_knn": {
+      "catalog_coverage@10": 0.20782899819727016,
+      "gini_exposure@10": 0.9558784248719964,
+      "hit_rate@10": 0.1111847555923778,
+      "mean_popularity@10": 1371.6942833471417,
+      "mrr@10": 0.04096750437264107,
+      "ndcg@10": 0.057220536527181766,
+      "novelty@10": 8.888203983204669,
+      "recall@10": 0.1111847555923778
+    }
+  }
+}
