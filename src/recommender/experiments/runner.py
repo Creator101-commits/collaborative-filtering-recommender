@@ -379,6 +379,7 @@ def run_neighborhood_baseline(
     similarity: str = "cosine",
     shrinkage: float = 10.0,
     min_support: int = 1,
+    aggregation: str = "weighted_mean",
     tracking_dir: Path = DEFAULT_TRACKING_DIR,
     artifact_dir: Path = DEFAULT_ARTIFACT_DIR,
     config: ExperimentConfig | None = None,
@@ -391,6 +392,7 @@ def run_neighborhood_baseline(
         similarity=similarity,
         shrinkage=shrinkage,
         min_support=min_support,
+        aggregation=aggregation,
     )
     config = config or ExperimentConfig()
     def make_user_model(user_count: int, item_count: int) -> RecommenderProtocol:
@@ -401,6 +403,7 @@ def run_neighborhood_baseline(
             similarity=neighborhood.similarity,
             shrinkage=neighborhood.shrinkage,
             min_support=neighborhood.min_support,
+            aggregation=neighborhood.aggregation,
         )
 
     def make_item_model(user_count: int, item_count: int) -> RecommenderProtocol:
@@ -411,6 +414,7 @@ def run_neighborhood_baseline(
             similarity=neighborhood.similarity,
             shrinkage=neighborhood.shrinkage,
             min_support=neighborhood.min_support,
+            aggregation=neighborhood.aggregation,
         )
 
     factory = make_user_model if model == UserKNNRecommender.model_name else make_item_model

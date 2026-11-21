@@ -109,11 +109,15 @@ def _make_model(
         similarity = config.get("similarity", "cosine")
         if not isinstance(similarity, str):
             raise ProtocolError(f"{name} configuration similarity must be a string")
+        aggregation = config.get("aggregation", "weighted_mean")
+        if not isinstance(aggregation, str):
+            raise ProtocolError(f"{name} configuration aggregation must be a string")
         neighborhood = NeighborhoodConfig(
             n_neighbors=integer("n_neighbors", 40),
             similarity=similarity,
             shrinkage=number("shrinkage", 10.0),
             min_support=integer("min_support", 1),
+            aggregation=aggregation,
         )
         constructor = (
             UserKNNRecommender if name == UserKNNRecommender.model_name else ItemKNNRecommender
@@ -125,6 +129,7 @@ def _make_model(
             similarity=neighborhood.similarity,
             shrinkage=neighborhood.shrinkage,
             min_support=neighborhood.min_support,
+            aggregation=neighborhood.aggregation,
         )
     if name == BiasedMatrixFactorizationRecommender.model_name:
         return BiasedMatrixFactorizationRecommender(

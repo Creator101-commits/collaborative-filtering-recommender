@@ -104,6 +104,9 @@ def evaluate(
     similarity: str = typer.Option("cosine", help="KNN similarity setting."),
     shrinkage: float = typer.Option(10.0, help="KNN similarity shrinkage."),
     min_support: int = typer.Option(1, help="Minimum shared support for KNN neighbors."),
+    aggregation: str = typer.Option(
+        "weighted_mean", help="KNN score aggregation: weighted_mean or weighted_sum."
+    ),
     latent_dim: int = typer.Option(32, help="Latent factor count for matrix factorization."),
     learning_rate: float = typer.Option(0.01, help="Matrix-factorization learning rate."),
     regularization: float = typer.Option(0.0001, help="Matrix-factorization L2 penalty."),
@@ -163,6 +166,7 @@ def evaluate(
                 similarity=similarity,
                 shrinkage=shrinkage,
                 min_support=min_support,
+                aggregation=aggregation,
                 tracking_dir=tracking_dir,
                 artifact_dir=artifact_dir,
                 config=config,

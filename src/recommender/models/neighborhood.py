@@ -25,6 +25,7 @@ class NeighborhoodConfig:
     similarity: str = "cosine"
     shrinkage: float = 10.0
     min_support: int = 1
+    aggregation: str = "weighted_mean"
 
     def __post_init__(self) -> None:
         if not isinstance(self.n_neighbors, int) or isinstance(self.n_neighbors, bool):
@@ -44,9 +45,12 @@ class NeighborhoodConfig:
             raise ValueError("min_support must be an integer")
         if self.min_support <= 0:
             raise ValueError("min_support must be positive")
+        if self.aggregation not in {"weighted_mean", "weighted_sum"}:
+            raise ValueError("aggregation must be weighted_mean or weighted_sum")
 
     def as_dict(self) -> dict[str, object]:
         return {
+            "aggregation": self.aggregation,
             "min_support": self.min_support,
             "n_neighbors": self.n_neighbors,
             "shrinkage": self.shrinkage,
@@ -262,6 +266,7 @@ class _NeighborhoodRecommender:
         similarity: str = "cosine",
         shrinkage: float = 10.0,
         min_support: int = 1,
+        aggregation: str = "weighted_mean",
     ) -> None:
         self.user_count = _positive_integer(user_count, "user_count")
         self.item_count = _positive_integer(item_count, "item_count")
@@ -270,6 +275,7 @@ class _NeighborhoodRecommender:
             similarity=similarity,
             shrinkage=shrinkage,
             min_support=min_support,
+            aggregation=aggregation,
         )
         self._entity_matrix: sparse.csr_matrix | None = None
         self._presence_matrix: sparse.csr_matrix | None = None
@@ -322,16 +328,24 @@ class _NeighborhoodRecommender:
         assert self._entity_matrix is not None
         assert self._presence_matrix is not None
         assert self._neighbors is not None
+        weighted_mean = self.config.aggregation == "weighted_mean"
         if self.orientation == "user":
             weights = self._neighbors.getrow(user_idx)
             numerator = weights.dot(self._entity_matrix)
-            denominator = abs(weights).dot(self._presence_matrix)
+            denominator = (
+                abs(weights).dot(self._presence_matrix) if weighted_mean else None
+            )
         else:
             ratings = self._entity_matrix.getcol(user_idx)
             presence = self._presence_matrix.getcol(user_idx)
             numerator = self._neighbors.dot(ratings)
-            denominator = abs(self._neighbors).dot(presence)
+            denominator = (
+                abs(self._neighbors).dot(presence) if weighted_mean else None
+            )
         numerator_values = numerator.toarray().ravel()
+        if not weighted_mean:
+            return [float(value) for value in numerator_values]
+        assert denominator is not None
         denominator_values = denominator.toarray().ravel()
         return [
             float(value) / float(normalizer) if normalizer else 0.0
@@ -424,6 +438,7 @@ class _NeighborhoodRecommender:
             similarity=cast(str, configuration.get("similarity")),
             shrinkage=cast(float, configuration.get("shrinkage")),
             min_support=_positive_integer(configuration.get("min_support"), "min_support"),
+            aggregation=cast(str, configuration.get("aggregation", "weighted_mean")),
         )
         entity_matrix = _matrix_from_payload(model_value.get("ratings"), "ratings")
         neighbors = _matrix_from_payload(model_value.get("neighbors"), "neighbors")
