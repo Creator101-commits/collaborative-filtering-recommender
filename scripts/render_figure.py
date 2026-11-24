@@ -1,11 +1,11 @@
 """Reproduce image.png from curated results/ benchmark outputs.
 
 Reads ``results/final-results.csv``, ``results/validation-results.csv``,
-and ``results/manifest.json`` and renders three panels: frozen-test
-recall@10 and ndcg@10 with bootstrap intervals per model (per-seed spread
-for the stochastic models), the validation KNN aggregation comparison,
-and the test popularity-bias profile. Writes ``figure-data.json`` with
-the plotted values so every number traces to results/.
+and ``results/manifest.json`` and renders five panels in the shared
+portfolio style: frozen-test recall@10 and ndcg@10 with bootstrap
+intervals per model, test recall@K versus K, test recall@10 versus
+catalog coverage@10, the validation KNN aggregation comparison, and
+the test popularity-bias profile. Every number traces to results/.
 
 Requires the project dependencies and an environment with Matplotlib,
 e.g. ``uv run --with matplotlib python scripts/render_figure.py``.
@@ -14,31 +14,390 @@ e.g. ``uv run --with matplotlib python scripts/render_figure.py``.
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
+import sys
 from pathlib import Path
-from typing import Any
 
 import matplotlib
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 from matplotlib.lines import Line2D
 
+INK = "#1F2A37"
+BLUE = "#3B6EA8"
+TEAL = "#2A9D8F"
+AMBER = "#E9A23B"
+CORAL = "#D1495B"
+GRAY = "#9AA5B1"
+GRID = "#EEF0F2"
+SPINE = "#B8BEC6"
+TICK_LABEL = "#4A5361"
+
 plt.rcParams.update(
     {
-        "font.family": "DejaVu Sans",
-        "font.size": 10,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "axes.titleweight": "bold",
+        "font.family": "serif",
+        "font.serif": ["cmr10"],
+        "mathtext.fontset": "cm",
+        "axes.formatter.use_mathtext": True,
+        "axes.unicode_minus": False,
         "figure.facecolor": "white",
+        "savefig.facecolor": "white",
+        "axes.titlesize": 11,
+        "axes.labelsize": 10,
+        "xtick.labelsize": 8.5,
+        "ytick.labelsize": 8.5,
+        "legend.fontsize": 8,
+        "legend.frameon": False,
+        "text.color": INK,
+        "axes.labelcolor": INK,
+        "axes.edgecolor": SPINE,
+        "axes.linewidth": 0.8,
+        "xtick.color": SPINE,
+        "ytick.color": SPINE,
+        "xtick.labelcolor": TICK_LABEL,
+        "ytick.labelcolor": TICK_LABEL,
+        "xtick.direction": "out",
+        "ytick.direction": "out",
+        "xtick.major.size": 3,
+        "ytick.major.size": 3,
+        "xtick.major.width": 0.6,
+        "ytick.major.width": 0.6,
     }
 )
+
+DPI = 150
+
+def _fmt2(x: float, _pos: int) -> str:
+    """Up to 2 decimals inside mathtext; large values as integers."""
+    if x == 0:
+        return "$0$"
+    if abs(x) >= 1000:
+        return f"${x:.0f}$"
+    s = f"{x:.2f}".rstrip("0").rstrip(".")
+    if s in ("", "-0"):
+        return "$0$"
+    return f"${s}$"
+
+
+CATEGORICAL: list[tuple[plt.Axes, str, list[str]]] = []
+
+
+def style(
+    ax: plt.Axes,
+    letter: str,
+    title: str,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    grid: bool = True,
+) -> None:
+    ax.set_title(f"({letter}) {title}", loc="left", fontsize=11, color=INK)
+    if xlabel is not None:
+        ax.set_xlabel(xlabel, fontsize=10, color=INK)
+    if ylabel is not None:
+        ax.set_ylabel(ylabel, fontsize=10, color=INK)
+    for name in ("top", "right"):
+        ax.spines[name].set_visible(False)
+    for name in ("left", "bottom"):
+        ax.spines[name].set_visible(True)
+        ax.spines[name].set_color(SPINE)
+        ax.spines[name].set_linewidth(0.8)
+    ax.tick_params(
+        axis="both",
+        direction="out",
+        length=3,
+        width=0.6,
+        color=SPINE,
+        labelcolor=TICK_LABEL,
+        labelsize=8.5,
+    )
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(_fmt2))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_fmt2))
+    if grid:
+        ax.grid(axis="y", color=GRID, linewidth=0.6)
+        ax.set_axisbelow(True)
+
+
+def cat(
+    ax: plt.Axes,
+    axis: str,
+    positions: list[int] | range,
+    labels: list[str],
+    rotation: float = 0,
+    ha: str | None = None,
+    fontsize: float | None = None,
+) -> None:
+    """Categorical ticks: FixedLocator + FixedFormatter applied AFTER
+    style(), so the numeric FuncFormatter cannot clobber the labels.
+    Rotation/alignment/fontsize are set on the label Texts directly."""
+    labels = list(labels)
+    if axis == "x":
+        ax.set_xticks(positions)
+        ax.xaxis.set_major_locator(mticker.FixedLocator(positions))
+        ax.xaxis.set_major_formatter(mticker.FixedFormatter(labels))
+        ax.xaxis.set_minor_locator(mticker.NullLocator())
+        texts = ax.get_xticklabels()
+    else:
+        ax.set_yticks(positions)
+        ax.yaxis.set_major_locator(mticker.FixedLocator(positions))
+        ax.yaxis.set_major_formatter(mticker.FixedFormatter(labels))
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
+        texts = ax.get_yticklabels()
+    for t in texts:
+        if rotation:
+            t.set_rotation(rotation)
+        if ha:
+            t.set_ha(ha)
+        if fontsize:
+            t.set_fontsize(fontsize)
+    CATEGORICAL.append((ax, axis, labels))
+
+
+def verify_categories() -> None:
+    bad = []
+    for ax, axis, expected in CATEGORICAL:
+        got = [
+            t.get_text()
+            for t in (ax.get_xticklabels() if axis == "x" else ax.get_yticklabels())
+        ]
+        if got != expected:
+            bad.append((axis, expected, got))
+    CATEGORICAL.clear()
+    if bad:
+        details = "; ".join(f"{a} expected={e} got={g}" for a, e, g in bad)
+        raise RuntimeError(f"categorical tick labels mismatch: {details}")
+
+
+def _all_texts(fig: plt.Figure) -> list[plt.Text]:
+    items = []
+    for ax in fig.axes:
+        cand = [ax.title, ax.xaxis.label, ax.yaxis.label]
+        cand += list(ax.texts)
+        for axis in (ax.xaxis, ax.yaxis):
+            try:
+                ticks = axis._update_ticks()  # noqa: SLF001
+            except Exception:
+                ticks = []
+            for tick in ticks:
+                lab = tick.label1
+                if lab.get_text():
+                    cand.append(lab)
+        leg = ax.get_legend()
+        if leg is not None:
+            cand += list(leg.get_texts())
+        for t in cand:
+            try:
+                if t.get_text() and t.get_visible():
+                    items.append(t)
+            except Exception:
+                pass
+    return items
+
+
+def check_text_overlap(fig: plt.Figure) -> list[str]:
+    fig.canvas.draw()
+    fig.canvas.draw()
+    ren = fig.canvas.get_renderer()
+    W, H = fig.canvas.get_width_height()
+    boxes = []
+    for t in _all_texts(fig):
+        bb = t.get_window_extent(ren)
+        boxes.append((t.get_text()[:40], bb))
+    problems = []
+    for i, (s1, b1) in enumerate(boxes):
+        if b1.x0 < -1 or b1.y0 < -1 or b1.x1 > W + 1 or b1.y1 > H + 1:
+            problems.append(f"OUT-OF-FIGURE {s1!r} bbox={b1}")
+        for s2, b2 in boxes[i + 1 :]:
+            ix = min(b1.x1, b2.x1) - max(b1.x0, b2.x0)
+            iy = min(b1.y1, b2.y1) - max(b1.y0, b2.y0)
+            if ix > 1.5 and iy > 1.5:
+                inter = ix * iy
+                small = min(b1.width * b1.height, b2.width * b2.height)
+                if inter > max(8.0, 0.10 * small):
+                    problems.append(f"OVERLAP {s1!r} x {s2!r} area={inter:.0f}px2")
+    return problems
+
+
+def check_legend_data(fig: plt.Figure) -> list[str]:
+    """Count data markers/vertices falling inside legend boxes."""
+    fig.canvas.draw()
+    fig.canvas.draw()
+    ren = fig.canvas.get_renderer()
+    out = []
+    for ax in fig.axes:
+        leg = ax.get_legend()
+        if leg is None:
+            continue
+        lb = leg.get_window_extent(ren)
+        covered = 0
+        total = 0
+        for coll in ax.collections:
+            offs = coll.get_offsets()
+            if len(offs) == 0 or len(offs) > 2000:
+                continue
+            pts = ax.transData.transform(offs)
+            inside = (
+                (pts[:, 0] > lb.x0)
+                & (pts[:, 0] < lb.x1)
+                & (pts[:, 1] > lb.y0)
+                & (pts[:, 1] < lb.y1)
+            ).sum()
+            covered += int(inside)
+            total += len(offs)
+        for line in ax.lines:
+            if line.get_transform() != ax.transData:
+                continue
+            try:
+                pts = ax.transData.transform(line.get_path().vertices)
+            except Exception:
+                continue
+            inside = (
+                (pts[:, 0] > lb.x0)
+                & (pts[:, 0] < lb.x1)
+                & (pts[:, 1] > lb.y0)
+                & (pts[:, 1] < lb.y1)
+            ).sum()
+            covered += int(inside)
+            total += len(pts)
+        for patch in ax.patches:
+            try:
+                pb = patch.get_window_extent(ren)
+            except Exception:
+                continue
+            if pb.x0 < lb.x1 and pb.x1 > lb.x0 and pb.y0 < lb.y1 and pb.y1 > lb.y0:
+                covered += 1
+            total += 1
+        if covered:
+            out.append(f"legend covers ~{covered}/{total} data items")
+    return out
+
+
+def check_annotation_data(fig: plt.Figure) -> list[str]:
+    """In-axes annotations vs plotted data."""
+    fig.canvas.draw()
+    fig.canvas.draw()
+    ren = fig.canvas.get_renderer()
+    out = []
+    for ax in fig.axes:
+        for t in ax.texts:
+            if not t.get_text() or not t.get_visible():
+                continue
+            tb = t.get_window_extent(ren)
+            hits = 0
+            for line in ax.lines:
+                if line.get_transform() != ax.transData:
+                    continue
+                pts = ax.transData.transform(line.get_path().vertices)
+                hits += int(
+                    (
+                        (pts[:, 0] > tb.x0)
+                        & (pts[:, 0] < tb.x1)
+                        & (pts[:, 1] > tb.y0)
+                        & (pts[:, 1] < tb.y1)
+                    ).sum()
+                )
+            for coll in ax.collections:
+                offs = coll.get_offsets()
+                if len(offs) == 0 or len(offs) > 5000:
+                    continue
+                pts = ax.transData.transform(offs)
+                hits += int(
+                    (
+                        (pts[:, 0] > tb.x0)
+                        & (pts[:, 0] < tb.x1)
+                        & (pts[:, 1] > tb.y0)
+                        & (pts[:, 1] < tb.y1)
+                    ).sum()
+                )
+            if hits:
+                out.append(f"'{t.get_text()}' overlaps ~{hits} data pts")
+    return out
+
+
+def check_legend_pixels(fig: plt.Figure, path: Path) -> list[str]:
+    """Saturated (colored) data pixels showing through legend boxes."""
+    if not path.exists():
+        return []
+    img = plt.imread(path)
+    H, W = img.shape[:2]
+    rgb = img[..., :3]
+    spread = rgb.max(axis=2) - rgb.min(axis=2)
+    colored = spread > 0.18
+    def _collect(o: object, swatches: list) -> None:
+        if type(o).__name__ == "DrawingArea":
+            swatches.append(o)
+            return
+        try:
+            children = o.get_visible_children()
+        except Exception:
+            children = []
+        for c in children:
+            _collect(c, swatches)
+
+    out = []
+    for ax in fig.axes:
+        leg = ax.get_legend()
+        if leg is None:
+            continue
+        bb = leg.get_window_extent(fig.canvas.get_renderer())
+        x0, x1 = int(bb.x0), min(int(bb.x1) + 1, W)
+        y0, y1 = max(0, int(H - bb.y1)), min(H, int(H - bb.y0) + 1)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        region = colored[y0:y1, x0:x1].copy()
+        # mask every legend handle swatch (any column) so only data-colored
+        # bleed through the legend body counts; swatches live in
+        # DrawingArea children of the legend's offset box
+        swatches: list = []
+        box = getattr(leg, "_legend_handle_box", None)
+        if box is not None:
+            _collect(box, swatches)
+        for sw in swatches:
+            try:
+                hb = sw.get_window_extent(fig.canvas.get_renderer())
+            except Exception:
+                continue
+            if not all(np.isfinite([hb.x0, hb.x1, hb.y0, hb.y1])):
+                continue
+            pad = 3
+            hx0, hx1 = int(hb.x0) - x0 - pad, int(hb.x1) - x0 + pad
+            hy0, hy1 = int(H - hb.y1) - y0 - pad, int(H - hb.y0) - y0 + pad
+            rx0, rx1 = max(0, hx0), min(region.shape[1], hx1)
+            ry0, ry1 = max(0, hy0), min(region.shape[0], hy1)
+            if rx1 > rx0 and ry1 > ry0:
+                region[ry0:ry1, rx0:rx1] = False
+        frac = region.mean() if region.size else 0.0
+        if frac > 0.015:
+            out.append(f"legend body ~{frac:.1%} covered by data color")
+    return out
+
+
+def finish(fig: plt.Figure, out: Path) -> None:
+    """Verify categorical labels, save, then fail on any check violation."""
+    fig.canvas.draw()
+    fig.canvas.draw()
+    verify_categories()
+    fig.savefig(out, dpi=DPI, facecolor="white")
+    problems: list[str] = []
+    problems += check_text_overlap(fig)
+    problems += check_legend_data(fig)
+    problems += check_annotation_data(fig)
+    problems += check_legend_pixels(fig, out)
+    plt.close(fig)
+    if problems:
+        for p in problems[:30]:
+            print(f"  CHECK FAIL: {p}", file=sys.stderr)
+        sys.exit(f"figure checks failed for {out.name}: {len(problems)} problem(s)")
+    print("wrote", out)
+
+
+
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
+OUT = ROOT / "image.png"
 
 MODEL_ORDER = ["popularity", "user_knn", "item_knn", "matrix_factorization", "bpr"]
 MODEL_LABELS = {
@@ -49,13 +408,14 @@ MODEL_LABELS = {
     "bpr": "BPR",
 }
 MODEL_COLORS = {
-    "popularity": "#64748b",
-    "user_knn": "#4169e1",
-    "item_knn": "#10a68b",
-    "matrix_factorization": "#d95f45",
-    "bpr": "#8659cf",
+    "popularity": GRAY,
+    "user_knn": BLUE,
+    "item_knn": TEAL,
+    "matrix_factorization": AMBER,
+    "bpr": CORAL,
 }
-AGG_COLORS = {"weighted_mean": "#94a3b8", "weighted_sum": "#d95f45"}
+AGG_COLORS = {"weighted_mean": GRAY, "weighted_sum": CORAL}
+KS = [5, 10, 20]
 
 
 def _rows(name: str) -> list[dict[str, str]]:
@@ -67,83 +427,134 @@ def _f(value: str) -> float:
     return float(value)
 
 
+def _seeds(final: list[dict[str, str]], model: str) -> list[dict[str, str]]:
+    return [r for r in final if r["model"] == model]
+
+
+def _mean_ci(
+    seeds: list[dict[str, str]], est_col: str, lo_col: str, hi_col: str
+) -> tuple[float, float, float]:
+    ests = np.array([_f(r[est_col]) for r in seeds])
+    lo = float(np.mean([_f(r[lo_col]) for r in seeds]))
+    hi = float(np.mean([_f(r[hi_col]) for r in seeds]))
+    return float(ests.mean()), lo, hi
+
+
 def main() -> None:
     final = _rows("final-results.csv")
     validation = _rows("validation-results.csv")
-    manifest = json.loads((RESULTS / "manifest.json").read_text(encoding="utf-8"))
 
-    fig, axes = plt.subplots(1, 3, figsize=(17, 5.2), layout="constrained")
+    fig, axes = plt.subplots(
+        2, 3, figsize=(16.5, 8.4), dpi=DPI, layout="constrained"
+    )
+    (a1, a2, a3), (a4, a5, _a6) = axes
 
-    # Panel 1: test recall@10 (solid) and ndcg@10 (hollow) with CIs.
-    ax = axes[0]
+    # (a) frozen-test recall@10 (solid) and ndcg@10 (hollow) with CIs.
     xticks = np.arange(len(MODEL_ORDER))
-    metric_specs = [
-        ("recall@10", "recall@10_estimate", "recall@10_ci_low", "recall@10_ci_high", True),
-        ("ndcg@10", "ndcg@10_estimate", "ndcg@10_ci_low", "ndcg@10_ci_high", False),
-    ]
-    panel1_payload: dict[str, Any] = {}
     offset = {"recall@10": -0.16, "ndcg@10": 0.16}
-    for metric, est_col, lo_col, hi_col, solid in metric_specs:
+    for metric, est_col, lo_col, hi_col, solid in (
+        ("recall@10", "recall@10", "recall@10_ci_low",
+         "recall@10_ci_high", True),
+        ("ndcg@10", "ndcg@10", "ndcg@10_ci_low",
+         "ndcg@10_ci_high", False),
+    ):
         for i, model in enumerate(MODEL_ORDER):
-            seeds = [r for r in final if r["model"] == model]
-            ests = np.array([_f(r[est_col]) for r in seeds])
-            mean_est = float(ests.mean())
-            # Mean CI bounds across seeds for the error bar.
-            lo = float(np.mean([_f(r[lo_col]) for r in seeds]))
-            hi = float(np.mean([_f(r[hi_col]) for r in seeds]))
+            seeds = _seeds(final, model)
+            mean_est, lo, hi = _mean_ci(seeds, est_col, lo_col, hi_col)
             x = i + offset[metric]
             color = MODEL_COLORS[model]
             if solid:
-                ax.errorbar(
+                a1.errorbar(
                     x, mean_est, yerr=[[mean_est - lo], [hi - mean_est]],
-                    fmt="o", ms=6, color=color, ecolor=color, elinewidth=1.4,
-                    capsize=3, alpha=0.9,
+                    fmt="o", ms=6, color=color, ecolor=color,
+                    elinewidth=1.2, capsize=3, alpha=0.9,
                 )
             else:
-                ax.errorbar(
+                a1.errorbar(
                     x, mean_est, yerr=[[mean_est - lo], [hi - mean_est]],
                     fmt="o", ms=6, mfc="white", mec=color, color=color,
-                    ecolor=color, elinewidth=1.2, capsize=3, alpha=0.9,
+                    ecolor=color, elinewidth=1.0, capsize=3, alpha=0.9,
                 )
-            # Per-seed spread for stochastic models.
             if len(seeds) > 1:
-                ax.plot(
-                    np.full(len(seeds), x) + np.linspace(-0.05, 0.05, len(seeds)),
+                ests = np.array([_f(r[est_col]) for r in seeds])
+                a1.plot(
+                    np.full(len(seeds), x)
+                    + np.linspace(-0.05, 0.05, len(seeds)),
                     ests, "|", color=color, ms=8, mew=1.2, alpha=0.8,
                 )
-            panel1_payload.setdefault(model, {})[metric] = {
-                "seeds": [float(r[est_col]) for r in seeds],
-                "mean": mean_est,
-                "ci_low_mean": lo,
-                "ci_high_mean": hi,
-            }
-    ax.set_xticks(xticks, [MODEL_LABELS[m] for m in MODEL_ORDER], fontsize=9)
-    ax.set_ylabel("Score")
-    ax.set_title("Frozen test metrics (95% bootstrap CI)")
-    ax.set_ylim(0, 0.13)
-    ax.grid(axis="y", alpha=0.2)
-    ax.legend(
+    style(a1, "a", "Frozen test metrics (95% bootstrap CI)",
+          ylabel="Score")
+    cat(a1, "x", xticks, [MODEL_LABELS[m] for m in MODEL_ORDER])
+    a1.set_ylim(0, 0.13)
+    a1.legend(
         handles=[
-            Line2D([0], [0], marker="o", color="#334155", ls="",
+            Line2D([0], [0], marker="o", color=INK, ls="",
                    label="recall@10 (solid)"),
-            Line2D([0], [0], marker="o", mfc="white", mec="#334155", ls="",
+            Line2D([0], [0], marker="o", mfc="white", mec=INK, ls="",
                    label="ndcg@10 (hollow)"),
-            Line2D([0], [0], marker="|", color="#334155", ls="",
+            Line2D([0], [0], marker="|", color=INK, ls="",
                    label="per-seed value"),
         ],
-        fontsize=8, loc="upper right",
+        fontsize=7, loc="upper right", ncol=1,
     )
 
-    # Panel 2: validation KNN aggregation comparison (recall@10, log y).
-    ax = axes[1]
+    # (b) test recall@K vs K per method (mean over seeds).
+    for model in MODEL_ORDER:
+        seeds = _seeds(final, model)
+        ys = [
+            float(np.mean([_f(r[f"recall@{k}"]) for r in seeds]))
+            for k in KS
+        ]
+        a2.plot(
+            KS, ys, marker="o", ms=5.5, lw=1.9,
+            color=MODEL_COLORS[model], label=MODEL_LABELS[model],
+        )
+        mean_est, lo, hi = _mean_ci(
+            seeds, "recall@10_estimate", "recall@10_ci_low",
+            "recall@10_ci_high",
+        )
+        k10 = ys[1]
+        a2.errorbar(
+            [10], [k10], yerr=[[k10 - lo], [hi - k10]], fmt="none",
+            ecolor=INK, elinewidth=0.9, capsize=2.5,
+        )
+    style(a2, "b", "Test recall@K vs K", xlabel="K", ylabel="recall@K")
+    a2.set_xticks(KS)
+    a2.legend(fontsize=7, loc="upper left", ncol=1)
+
+    # (c) test recall@10 vs catalog coverage@10 per method.
+    for model in MODEL_ORDER:
+        seeds = _seeds(final, model)
+        cov = float(np.mean([_f(r["catalog_coverage@10"]) for r in seeds]))
+        ests = np.array([_f(r["recall@10_estimate"]) for r in seeds])
+        los = np.array([_f(r["recall@10_ci_low"]) for r in seeds])
+        his = np.array([_f(r["recall@10_ci_high"]) for r in seeds])
+        x, y = cov, float(ests.mean())
+        a3.errorbar(
+            x, y, yerr=[[y - float(los.mean())],
+                        [float(his.mean()) - y]],
+            fmt="o", ms=8, color=MODEL_COLORS[model],
+            ecolor=MODEL_COLORS[model], elinewidth=1.0, capsize=3,
+        )
+        if len(seeds) > 1:
+            a3.plot(
+                np.full(len(seeds), x) + np.linspace(-0.006, 0.006,
+                                                    len(seeds)),
+                ests, "o", ms=3.5, mfc="none",
+                mec=MODEL_COLORS[model], alpha=0.7,
+            )
+    style(a3, "c", "Recall@10 vs catalog coverage@10 (test)",
+          xlabel="catalog coverage@10", ylabel="recall@10")
+
+    # (d) validation KNN aggregation comparison (recall@10, log y).
     knn_rows = [r for r in validation if r["model"] in ("user_knn", "item_knn")]
-    groups = []
-    for model in ("user_knn", "item_knn"):
-        for sim in ("cosine", "adjusted_cosine"):
-            groups.append((model, sim))
+    groups = [
+        (model, sim)
+        for model in ("user_knn", "item_knn")
+        for sim in ("cosine", "adjusted_cosine")
+    ]
     gpos = np.arange(len(groups))
     agg_offset = {"weighted_mean": -0.18, "weighted_sum": 0.18}
-    panel2_payload: dict[str, Any] = {}
     for agg in ("weighted_mean", "weighted_sum"):
         for j, (model, sim) in enumerate(groups):
             match = [
@@ -157,87 +568,71 @@ def main() -> None:
             r = match[0]
             val = _f(r["recall@10"])
             x = gpos[j] + agg_offset[agg]
-            ax.plot(x, val, "o", ms=8, color=AGG_COLORS[agg])
-            ax.annotate(f"{val:.3f}", (x, val), xytext=(0, 7),
-                        textcoords="offset points", ha="center", fontsize=7.5)
-            panel2_payload[f"{model}/{sim}/{agg}"] = {
-                "recall@10": val,
-                "ndcg@10": _f(r["ndcg@10"]),
-                "mean_popularity@10": _f(r["mean_popularity@10"]),
-            }
-    ax.set_yscale("log")
-    ax.set_xticks(gpos, [f"{MODEL_LABELS[m]}\n{sim.replace('_', ' ')}"
-                         for m, sim in groups], fontsize=8)
-    ax.set_ylabel("Validation recall@10 (log scale)")
-    ax.set_title("KNN aggregation: weighted_mean vs weighted_sum")
-    ax.grid(axis="y", alpha=0.2)
-    ax.legend(
+            a4.plot(x, val, "o", ms=7, color=AGG_COLORS[agg])
+            a4.annotate(
+                f"{val:.4f}", (x, val), xytext=(0, 7),
+                textcoords="offset points", ha="center", fontsize=7.5,
+                color=INK,
+            )
+    a4.set_yscale("log")
+    style(
+        a4, "d", "KNN aggregation: weighted_mean vs weighted_sum",
+        ylabel="Validation recall@10",
+    )
+    cat(
+        a4, "x", gpos,
+        [f"{MODEL_LABELS[m]}\n{sim.replace('_', ' ')}"
+         for m, sim in groups],
+    )
+    a4.legend(
         handles=[
-            Line2D([0], [0], marker="o", color=AGG_COLORS["weighted_sum"], ls="",
-                   label="weighted_sum"),
-            Line2D([0], [0], marker="o", color=AGG_COLORS["weighted_mean"], ls="",
-                   label="weighted_mean"),
+            Line2D([0], [0], marker="o", color=AGG_COLORS["weighted_sum"],
+                   ls="", label="weighted_sum"),
+            Line2D([0], [0], marker="o", color=AGG_COLORS["weighted_mean"],
+                   ls="", label="weighted_mean"),
         ],
-        fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2,
+        fontsize=7, loc="best", ncol=1,
     )
 
-    # Panel 3: popularity bias, mean_popularity@10 per model on test.
-    ax = axes[2]
+    # (e) popularity bias, mean_popularity@10 per model on test.
     pops = []
     for model in MODEL_ORDER:
-        seeds = [r for r in final if r["model"] == model]
-        pops.append(float(np.mean([_f(r["mean_popularity@10"]) for r in seeds])))
-    ax.bar(
-        xticks, pops,
-        color=[MODEL_COLORS[m] for m in MODEL_ORDER], width=0.62,
+        seeds = _seeds(final, model)
+        pops.append(
+            float(np.mean([_f(r["mean_popularity@10"]) for r in seeds]))
+        )
+    a5.bar(
+        xticks, pops, color=[MODEL_COLORS[m] for m in MODEL_ORDER],
+        width=0.62,
     )
     for i, v in enumerate(pops):
-        ax.annotate(f"{v:,.0f}", (i, v), xytext=(0, 4),
-                    textcoords="offset points", ha="center", fontsize=8)
-    ax.set_xticks(xticks, [MODEL_LABELS[m] for m in MODEL_ORDER], fontsize=9)
-    ax.set_ylabel("mean_popularity@10")
-    ax.set_title("Popularity of recommended items (test)")
-    ax.set_ylim(0, max(pops) * 1.18)
-    ax.grid(axis="y", alpha=0.2)
+        a5.annotate(
+            f"{v:,.0f}", (i, v), xytext=(0, 4),
+            textcoords="offset points", ha="center", fontsize=8,
+            color=INK,
+        )
+    style(a5, "e", "Popularity of recommended items (test)",
+          ylabel="mean_popularity@10")
+    cat(a5, "x", xticks, [MODEL_LABELS[m] for m in MODEL_ORDER])
+    a5.set_ylim(0, max(pops) * 1.15)
 
-    fig.suptitle(
-        "Collaborative filtering benchmark | frozen test and validation results",
-        fontsize=15,
-    )
-    fig.supxlabel(
-        f"Source: results/final-results.csv and results/validation-results.csv, "
-        f"git_sha {manifest.get('git_sha', 'unknown')}, "
-        f"protocol {manifest.get('protocol_version', 'unknown')}.",
-        fontsize=9,
+    # Shared method legend lives in the empty cell.
+    _a6.set_xticks([])
+    _a6.set_yticks([])
+    for _sp in _a6.spines.values():
+        _sp.set_visible(False)
+    _a6.set_xlim(0, 1)
+    _a6.set_ylim(0, 1)
+    _a6.legend(
+        handles=[
+            Line2D([0], [0], marker="o", ms=6, ls="-", lw=1.6,
+                   color=MODEL_COLORS[m], label=MODEL_LABELS[m])
+            for m in MODEL_ORDER
+        ],
+        fontsize=8, loc="center", ncol=1,
     )
 
-    payload = {
-        "source": "results/ CSVs copied unedited from the Kaggle benchmark run",
-        "git_sha": manifest.get("git_sha"),
-        "protocol_version": manifest.get("protocol_version"),
-        "test_metrics": panel1_payload,
-        "knn_validation": panel2_payload,
-        "mean_popularity_at_10": {
-            MODEL_LABELS[m]: pops[i] for i, m in enumerate(MODEL_ORDER)
-        },
-    }
-    source_hash = hashlib.sha256()
-    for name in (
-        "final-results.csv", "validation-results.csv", "manifest.json",
-        "paired-results.csv",
-    ):
-        path = RESULTS / name
-        if path.exists():
-            source_hash.update(name.encode())
-            source_hash.update(path.read_bytes())
-    payload["results_sha256"] = source_hash.hexdigest()
-
-    fig.savefig(ROOT / "image.png", dpi=180, metadata={"Software": "Matplotlib"})
-    plt.close(fig)
-    (ROOT / "scripts" / "figure-data.json").write_text(
-        json.dumps(payload, indent=2, allow_nan=False) + "\n", encoding="utf-8"
-    )
-    print(f"wrote {ROOT / 'image.png'} and scripts/figure-data.json")
+    finish(fig, OUT)
 
 
 if __name__ == "__main__":

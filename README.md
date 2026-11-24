@@ -124,6 +124,33 @@ Project: [github.com/Creator101-commits/collaborative-filtering-recommender](htt
 
 Curated benchmark outputs are stored under [`results/`](./results/) and are copied unedited from the Kaggle run (`git_sha` `045f514a9df574d236a230fd1f00053d351a777a`, `protocol_version` `phase-8-v3`). The run writes `manifest.json`, `experiment-card.json`, `validation-results.csv`, `final-results.csv`, `final-slices.csv`, `paired-results.csv`, `report.md`, and supporting report assets. Every number reported in the README traces to a file in `results/`.
 
+![Collaborative filtering benchmark results: test recall and ndcg, recall versus K, recall versus catalog coverage, KNN validation aggregation and popularity bias](image.png)
+
+### What the figure shows
+
+- (a) Frozen test metrics: user and item KNN lead recall@10 at about
+  0.098 with ndcg@10 about 0.049; BPR reaches 0.063-0.071 recall@10,
+  while MF (about 0.041) and popularity (0.044) lag; tick marks show
+  the per-seed spread for the stochastic models.
+- (b) Test recall@K vs K: the KNN methods pull away as K grows,
+  reaching recall@20 of 0.165 (user) and 0.160 (item) versus 0.076 for
+  popularity, while MF grows more slowly to only about 0.064.
+- (c) Recall@10 vs catalog coverage@10: item KNN and BPR cover about a
+  third of the catalog, yet BPR converts that breadth into only 0.068
+  recall versus 0.098 for item KNN; popularity and MF cluster at
+  coverage near 0.046.
+- (d) Validation KNN aggregation: weighted_sum beats weighted_mean by
+  one to two orders of magnitude on the log-scaled validation
+  recall@10 (about 0.11 versus 0.0003-0.003), and cosine similarity is
+  best for both families.
+- (e) Popularity bias: MF and popularity recommend the most popular
+  items (mean_popularity@10 about 1992 and 2066) while item KNN is
+  lowest at about 1074.
+
+Neighborhood methods win every ranking metric on the frozen test,
+BPR covers the catalog broadly without matching KNN recall, and the
+factorization models barely beat the popularity baseline.
+
 Frozen test metrics on MovieLens 1M (recall@10 with 95% bootstrap CI; ndcg@10 in parentheses):
 
 | model | seeds | recall@10 [CI] | ndcg@10 | mean_popularity@10 | catalog_coverage@10 |
@@ -151,4 +178,4 @@ The frozen test read happened once under `phase-8-v3`; earlier protocol versions
 
 ## Reproducing the figure
 
-`image.png` is rendered from `results/` by `scripts/render_figure.py` using `scripts/figure-data.json`. Run it in a Python environment containing the project dependencies and Matplotlib (for example `uv run --with matplotlib python scripts/render_figure.py`). Panels show frozen-test recall@10 and ndcg@10 with bootstrap intervals per model, the validation KNN aggregation comparison, and the test popularity-bias profile. The plotting environment is separate from the core runtime when Matplotlib is absent.
+`image.png` is rendered from `results/` by `scripts/render_figure.py`. Run `uv run --with matplotlib python scripts/render_figure.py` from the repository root in an environment containing the project dependencies. Panels show frozen-test recall@10 and ndcg@10 with bootstrap intervals per model, test recall@K versus K, test recall@10 versus catalog coverage@10, the validation KNN aggregation comparison, and the test popularity-bias profile. The plotting environment is separate from the core runtime when Matplotlib is absent.
