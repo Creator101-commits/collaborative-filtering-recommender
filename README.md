@@ -1,157 +1,17 @@
-![Banner](./image.png)
-
 # Collaborative Filtering Recommender
 
-> A reproducible MovieLens 1M benchmark for collaborative-filtering recommendation methods.
-
-[![CI](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml/badge.svg)](https://github.com/Creator101-commits/collaborative-filtering-recommender/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/github/license/Creator101-commits/collaborative-filtering-recommender)](./LICENSE)
-
-This project provides a leakage-controlled top-N MovieLens 1M benchmark for popularity, user- and item-based KNN, biased matrix factorization, and Bayesian Personalized Ranking. Validation selection, frozen test evaluation, bootstrap analysis, and machine-readable comparison tables are implemented; Matplotlib reporting is available. See [`PLAN.md`](./PLAN.md) for the phased research and implementation plan.
-
-## Table of Contents
-
-- [Collaborative Filtering Recommender](#collaborative-filtering-recommender)
-- [Quickstart / Demo](#quickstart--demo)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Development](#development)
-- [Contributing](#contributing)
-- [Release History](#release-history)
-- [License](#license)
-- [Meta](#meta)
-
-## Quickstart / Demo
-[(Back to top)](#table-of-contents)
-Download, validate, prepare, and evaluate MovieLens 1M with the reproducible workflow:
-
-```sh
-uv sync
-uv run recommender download
-uv run recommender prepare
-uv run recommender evaluate
-# After creating experiment-card.json from validation results:
-uv run recommender compare --experiment-card experiment-card.json
-uv run recommender report
-```
-
-## Installation
-[(Back to top)](#table-of-contents)
-
-Requirements:
-
-- macOS or Linux
-- Python 3.12
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
-
-```sh
-git clone https://github.com/Creator101-commits/collaborative-filtering-recommender.git
-cd collaborative-filtering-recommender
-uv sync --locked
-```
-
-## Usage
-[(Back to top)](#table-of-contents)
-
-```sh
-uv run recommender download
-uv run recommender prepare
-uv run recommender evaluate
-uv run recommender compare --experiment-card experiment-card.json
-uv run recommender report
-```
-
-The `download` command fetches from GroupLens, verifies the pinned archive size and checksums, validates every source record, and writes `data/raw/movielens-1m/manifest.json`. Rerunning it reuses the data only when every file still matches the manifest. Use `--output-dir` to choose another location.
-
-The `prepare` command reads the validated raw manifest, assigns stable zero-based indices in ascending identifier order, treats ratings `>= 4` as positive, and requires at least 3 positive interactions per evaluated user. It writes typed `ratings.parquet`, `movies.parquet`, `users.parquet`, `train.parquet`, `validation.parquet`, and `test.parquet` files plus `data/processed/movielens-1m/manifest.json`. Positive interactions are ordered by timestamp, movie ID, and source row; the last two become validation and test. `train.parquet` contains every source interaction earlier than validation, including lower-rated observations, while later unselected interactions remain outside training. Re-running with the same raw manifest and configuration reuses identical output and rejects stale or modified artifacts.
-
-Use `--raw-dir`, `--output-dir`, `--positive-rating-threshold`, or `--minimum-positive-history` to override the defaults.
-MovieLens 1M is provided by GroupLens for research use under conditions that require attribution and restrict redistribution and commercial use. Review the [dataset README and license](https://files.grouplens.org/datasets/movielens/ml-1m-README.txt) before use. Publications should cite F. Maxwell Harper and Joseph A. Konstan, “The MovieLens Datasets: History and Context,” ACM TiiS 5(4), 2015, https://doi.org/10.1145/2827872.
-
-The `evaluate` command fits a selected model using only `train.parquet`, ranks the complete eligible catalog, evaluates against `validation.parquet`, writes a CSV result table and model artifact under `artifacts/`, and logs the run to local MLflow under `mlruns/`. It never reads `test.parquet`; test evaluation remains reserved for the frozen final protocol.
-
-Use `--model popularity`, `--model user_knn`, `--model item_knn`, `--model matrix_factorization`, or `--model bpr`. KNN compares the `cosine` and `adjusted_cosine` similarity settings against `weighted_mean` (default) and `weighted_sum` score aggregation via `--aggregation`, with `--n-neighbors`, `--shrinkage`, and `--min-support` controlling the bounded configuration.
-
-Matrix factorization uses seeded mini-batch squared-error training and validation-loss checkpoint selection. BPR uses seeded negative sampling, pairwise ranking loss, and validation-loss checkpoint selection. Configure either learned model with `--latent-dim`, `--learning-rate`, `--regularization`, `--epochs`, and `--batch-size`; BPR also accepts `--negative-samples`.
-
-For example: `uv run recommender evaluate --model matrix_factorization --epochs 20` or `uv run recommender evaluate --model bpr --negative-samples 1`. Each validation run writes a CSV result table and a model artifact (`.json` for popularity/KNN, `.pt` for learned models) under `artifacts/`, and stores its MLflow run under `mlruns/`; both directories are ignored by Git.
-
-The `compare` command runs the frozen final test evaluation and writes aggregate, bootstrap, paired-difference, and slice CSV tables. The `report` command consumes those tables without retraining and writes `artifacts/report/report.md`, `summary.csv`, and a Matplotlib PNG figure.
-
-`EXPERIMENT_CARD.md` freezes the Phase 8 comparison protocol before final test evaluation. The pre-test audit and immutable JSON card helpers are available from `recommender.experiments`; the `compare` command applies the card without retraining or reselecting models.
-
-## Development
-[(Back to top)](#table-of-contents)
-
-Run the same checks used by CI:
-
-```sh
-uv sync --locked
-uv run pytest
-uv run ruff check .
-uv run mypy src
-```
-
-## Contributing
-[(Back to top)](#table-of-contents)
-
-1. Fork the repository.
-2. Create a focused feature branch.
-3. Add tests for the change.
-4. Run all development checks.
-5. Open a pull request with a clear description of why the change is needed.
-
-Use conventional commit messages such as `feat:`, `fix:`, and `chore:`.
-
-## Release History
-[(Back to top)](#table-of-contents)
-
-No releases have been published yet.
-
-## License
-[(Back to top)](#table-of-contents)
-
-Distributed under the MIT License. See [`LICENSE`](./LICENSE) for details.
-
-## Meta
-[(Back to top)](#table-of-contents)
-
-Sreeharsha Kannegundla
-
-Project: [github.com/Creator101-commits/collaborative-filtering-recommender](https://github.com/Creator101-commits/collaborative-filtering-recommender)
-
-## Results
-
-Curated benchmark outputs are stored under [`results/`](./results/) and are copied unedited from the Kaggle run (`git_sha` `045f514a9df574d236a230fd1f00053d351a777a`, `protocol_version` `phase-8-v3`). The run writes `manifest.json`, `experiment-card.json`, `validation-results.csv`, `final-results.csv`, `final-slices.csv`, `paired-results.csv`, `report.md`, and supporting report assets. Every number reported in the README traces to a file in `results/`.
+Which recommender actually wins on real ratings? This project benchmarks
+popularity, neighborhood and latent-factor models on MovieLens 1M:
+candidates are selected on validation, the test set is read once, and
+every metric carries a bootstrap interval.
 
 ![Collaborative filtering benchmark results: test recall and ndcg, recall versus K, recall versus catalog coverage, KNN validation aggregation and popularity bias](image.png)
 
-### What the figure shows
+The figure follows the comparison: (a) test recall@10 and ndcg@10 per
+model, (b) recall versus K, (c) recall versus catalog coverage, (d) the
+winning KNN aggregation, (e) how popular the picks are.
 
-- (a) Frozen test metrics: user and item KNN lead recall@10 at about
-  0.098 with ndcg@10 about 0.049; BPR reaches 0.063-0.071 recall@10,
-  while MF (about 0.041) and popularity (0.044) lag; tick marks show
-  the per-seed spread for the stochastic models.
-- (b) Test recall@K vs K: the KNN methods pull away as K grows,
-  reaching recall@20 of 0.165 (user) and 0.160 (item) versus 0.076 for
-  popularity, while MF grows more slowly to only about 0.064.
-- (c) Recall@10 vs catalog coverage@10: item KNN and BPR cover about a
-  third of the catalog, yet BPR converts that breadth into only 0.068
-  recall versus 0.098 for item KNN; popularity and MF cluster at
-  coverage near 0.046.
-- (d) Validation KNN aggregation: weighted_sum beats weighted_mean by
-  one to two orders of magnitude on the log-scaled validation
-  recall@10 (about 0.11 versus 0.0003-0.003), and cosine similarity is
-  best for both families.
-- (e) Popularity bias: MF and popularity recommend the most popular
-  items (mean_popularity@10 about 1992 and 2066) while item KNN is
-  lowest at about 1074.
-
-Neighborhood methods win every ranking metric on the frozen test,
-BPR covers the catalog broadly without matching KNN recall, and the
-factorization models barely beat the popularity baseline.
-
-Frozen test metrics on MovieLens 1M (recall@10 with 95% bootstrap CI; ndcg@10 in parentheses):
+## Results
 
 | model | seeds | recall@10 [CI] | ndcg@10 | mean_popularity@10 | catalog_coverage@10 |
 | --- | ---: | --- | --- | ---: | ---: |
@@ -161,21 +21,67 @@ Frozen test metrics on MovieLens 1M (recall@10 with 95% bootstrap CI; ndcg@10 in
 | matrix_factorization | 3 | 0.0414-0.0419 | 0.0191-0.0194 | ~1992 | 0.046 |
 | bpr | 3 | 0.0630-0.0713 | 0.0313-0.0345 | ~1216 | ~0.336 |
 
-Validation selection chose `cosine` similarity with `weighted_sum` aggregation for both KNN families (`n_neighbors=40`, `shrinkage=10`, `min_support=1`). The full 4-config KNN validation grid is in `results/validation-results.csv`.
+- **The two KNN variants tie for first.** Paired recall@10 difference
+  -0.0003 [-0.0081, +0.0075]; both roughly double popularity's 0.0442.
+- **BPR is the strongest learned model.** recall@10 0.0630-0.0713 across
+  seeds 0-2 (mean 0.0676), above popularity, below KNN.
+- **Matrix factorization collapses to popularity level.** recall@10
+  0.0414-0.0419, mean_popularity@10 ~1992 vs 2066, coverage 0.046: it
+  learned the popular head.
+- **The aggregation choice was decisive on validation.** weighted_sum
+  recall@10 0.0820-0.1112 vs 0.0003-0.0028 for weighted_mean (29x-371x
+  per cell); this validation-only evidence motivated phase-8-v3.
+- **KNN and BPR diversify; popularity and MF do not.** coverage@10
+  0.21-0.33 vs 0.046, and mean_popularity@10 is lower for KNN
+  (1074-1374) and BPR (~1216) than popularity's 2066.
+- **Popularity is a strong baseline, not the ceiling.** recall@10
+  0.0442; every other family except MF beats it.
 
-## Findings
+## How it works
 
-- **KNN with `weighted_sum` leads the frozen test.** user_knn recall@10 is 0.0978 [0.0903, 0.1054] and item_knn is 0.0981 [0.0906, 0.1057]; their intervals overlap almost completely and the paired recall@10 difference (user_knn minus item_knn) is -0.0003 [-0.0081, +0.0075], so the two KNN variants are statistically tied for first place. Both roughly double popularity's 0.0442.
-- **BPR is the strongest learned latent model.** recall@10 is 0.0630-0.0713 across seeds 0-2 (mean 0.0676), clearly above popularity but below both KNN variants.
-- **Matrix factorization collapses to popularity-level accuracy.** recall@10 is 0.0414-0.0419 across seeds, no better than popularity's 0.0442, and its mean_popularity@10 is about 1992 versus 2066 for popularity itself, with catalog_coverage@10 of only 0.046: the biased MF trained on raw ratings learned to recommend the popular head.
-- **`weighted_mean` aggregation was orders of magnitude worse on validation.** Across the 8 KNN validation cells, weighted_mean recall@10 ranges 0.0003-0.0028 while weighted_sum ranges 0.0820-0.1112 (per-cell ratios about 29x to 371x); dividing by the summed absolute similarity of contributing neighbors turns the score into a predicted rating, so an obscure item reached through a single similar neighbor scores that neighbor's full rating and floods the top-N with long-tail items (weighted_mean mean_popularity@10 is 149-244 versus 1071-1591 for weighted_sum). This validation-only evidence motivated the phase-8-v3 correction (disclosed in `EXPERIMENT_CARD.md` and `REVIEW.md`).
-- **KNN and BPR recommend a more diverse catalog slice.** catalog_coverage@10 is 0.21-0.33 for the KNN/BPR family versus 0.046 for popularity and MF, while mean_popularity@10 is lower (1074-1374 for KNN, ~1216 for BPR) than popularity's 2066.
-- **Popularity is a strong baseline but not the ceiling.** It reaches recall@10 0.0442 [0.0391, 0.0495]; every other model family except MF beats it, and KNN roughly doubles it.
+```text
+download + pinned checksum verify -> ratings >= 4 positive, >= 3 per user
+-> per-user chronological split; last interactions -> validation/test
+-> evaluate fits on train.parquet only, ranks catalog, selects on validation
+-> freeze experiment card -> compare does one test read -> bootstrap CIs
+```
 
-## Interpretation limits
+Validation selection chose `cosine` similarity with `weighted_sum`
+aggregation for both KNN families (`n_neighbors=40`, `shrinkage=10`,
+`min_support=1`).
 
-The frozen test read happened once under `phase-8-v3`; earlier protocol versions are disclosed in `EXPERIMENT_CARD.md` and `REVIEW.md` (phase-8-v2 ran once to completion before the KNN aggregation defect was found; its test read was not used for selection). The reported leading model is descriptive from test scores, so paired intervals against it are exploratory and unadjusted for selection. KNN and popularity evaluate a single seed; MF and BPR use three declared seeds. Per-user chronology does not impose a single global time cutoff across all users.
+## Run it
 
-## Reproducing the figure
+```bash
+uv sync --locked
+uv run pytest
+uv run ruff check .
+uv run mypy src
 
-`image.png` is rendered from `results/` by `scripts/render_figure.py`. Run `uv run --with matplotlib python scripts/render_figure.py` from the repository root in an environment containing the project dependencies. Panels show frozen-test recall@10 and ndcg@10 with bootstrap intervals per model, test recall@K versus K, test recall@10 versus catalog coverage@10, the validation KNN aggregation comparison, and the test popularity-bias profile. The plotting environment is separate from the core runtime when Matplotlib is absent.
+# full pipeline (Kaggle reproduction: scripts/kaggle_run.sh)
+uv run recommender download
+uv run recommender prepare
+uv run recommender evaluate --model user_knn   # repeat per model
+# after writing experiment-card.json from validation results:
+uv run recommender compare --experiment-card experiment-card.json
+uv run recommender report
+```
+
+`evaluate` takes `--model` (popularity, user_knn, item_knn,
+matrix_factorization, bpr); `EXPERIMENT_CARD.md` froze the protocol
+before the test read.
+
+## Notes
+
+- The reported leader is descriptive from test scores, so paired
+  intervals against it are exploratory and unadjusted for selection.
+- KNN and popularity use one seed; MF and BPR use three. Per-user
+  chronology means there is no single global time cutoff.
+- Protocol history is disclosed in `EXPERIMENT_CARD.md`: phase-8-v2 ran
+  to completion before the KNN aggregation defect was found, and its
+  test read was not used for selection.
+- Data: MovieLens 1M (GroupLens, research use with attribution);
+  ratings >= 4 count as positive and evaluated users need >= 3 positive
+  interactions.
+- Protocol `phase-8-v3`; curated kernel output is in `results/` (git
+  SHA in `manifest.json`), and `image.png` is rendered from it.
