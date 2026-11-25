@@ -1,5 +1,7 @@
 # Collaborative Filtering Recommender
 
+> Five recommenders compared on MovieLens 1M: item-based KNN hits 0.098 recall@10, more than double the popularity baseline.
+
 Which recommender actually wins on real ratings? This project benchmarks
 popularity, neighborhood and latent-factor models on MovieLens 1M:
 candidates are selected on validation, the test set is read once, and
