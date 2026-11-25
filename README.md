@@ -1,6 +1,6 @@
 # Collaborative Filtering Recommender
 
-> Five recommenders compared on MovieLens 1M: item-based KNN hits 0.098 recall@10, more than double the popularity baseline.
+> Movie recommender benchmark
 
 Which recommender actually wins on real ratings? This project benchmarks
 popularity, neighborhood and latent-factor models on MovieLens 1M:
@@ -50,7 +50,9 @@ download + pinned checksum verify -> ratings >= 4 positive, >= 3 per user
 
 Validation selection chose `cosine` similarity with `weighted_sum`
 aggregation for both KNN families (`n_neighbors=40`, `shrinkage=10`,
-`min_support=1`).
+`min_support=1`). The reported leader is descriptive from test scores,
+so paired intervals against it are exploratory; protocol history is
+disclosed in `EXPERIMENT_CARD.md`.
 
 ## Run it
 
@@ -72,18 +74,3 @@ uv run recommender report
 `evaluate` takes `--model` (popularity, user_knn, item_knn,
 matrix_factorization, bpr); `EXPERIMENT_CARD.md` froze the protocol
 before the test read.
-
-## Notes
-
-- The reported leader is descriptive from test scores, so paired
-  intervals against it are exploratory and unadjusted for selection.
-- KNN and popularity use one seed; MF and BPR use three. Per-user
-  chronology means there is no single global time cutoff.
-- Protocol history is disclosed in `EXPERIMENT_CARD.md`: phase-8-v2 ran
-  to completion before the KNN aggregation defect was found, and its
-  test read was not used for selection.
-- Data: MovieLens 1M (GroupLens, research use with attribution);
-  ratings >= 4 count as positive and evaluated users need >= 3 positive
-  interactions.
-- Protocol `phase-8-v3`; curated kernel output is in `results/` (git
-  SHA in `manifest.json`), and `image.png` is rendered from it.
